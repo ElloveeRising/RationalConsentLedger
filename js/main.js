@@ -9,6 +9,7 @@
   var hud = $('hud');
 
   var selectedChar = 'chad';
+  var selectedDiff = BZ.Secrets.progress.difficulty || 'chill';
   var lastHud = { points: 0 };
   var bannerT = 0;
   var installEvent = null;
@@ -94,6 +95,27 @@
       grid.appendChild(card);
       drawCharPreview(cv, ch, locked);
     });
+  }
+
+  /* ----------------------------------------------------------- DIFFICULTY */
+  function buildDifficulty() {
+    var seg = $('diff-seg');
+    seg.innerHTML = '';
+    BZ.DIFFICULTY_ORDER.forEach(function (id) {
+      var d = BZ.DIFFICULTY[id];
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = d.name;
+      b.setAttribute('aria-pressed', id === selectedDiff ? 'true' : 'false');
+      b.addEventListener('click', function () {
+        selectedDiff = id;
+        BZ.Secrets.setDifficulty(id);
+        buildDifficulty();
+        BZ.Audio.init(); BZ.Audio.buy();
+      });
+      seg.appendChild(b);
+    });
+    $('diff-blurb').textContent = BZ.DIFFICULTY[selectedDiff].blurb;
   }
 
   /* -------------------------------------------------------------- SECRETS */
@@ -287,7 +309,7 @@
     // If the chosen character got locked out somehow, fall back to a default.
     if (!BZ.Secrets.charUnlocked(selectedChar)) selectedChar = 'chad';
     toGame();
-    BZ.Game.start(selectedChar, nm || 'BLOCKHEAD');
+    BZ.Game.start(selectedChar, nm || 'BLOCKHEAD', selectedDiff);
     checkOrientation();
   }
 
@@ -428,6 +450,7 @@
   if (saved) $('name-input').value = saved;
   refreshTitleStats();
   buildCharGrid();
+  buildDifficulty();
 
   // Kick the audio context awake on the very first interaction of any kind.
   ['touchstart', 'mousedown', 'keydown'].forEach(function (ev) {

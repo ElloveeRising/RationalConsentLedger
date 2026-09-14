@@ -8,6 +8,7 @@
 
   var T = BZ.TILE, MW = BZ.MAP_W, MH = BZ.MAP_H;
   var S = null;            // live state; null until start()
+  var MELEE_REACH = 78;
   var canvas, ctx, dpr = 1;
   var listeners = [];
   var vw = 0, vh = 0;      // CSS-pixel viewport
@@ -168,8 +169,9 @@
       if (p) BZ.Input.clearSticks();
     },
 
-    start: function (charId, playerName) {
+    start: function (charId, playerName, difficulty) {
       var chDef = BZ.CHARACTERS.filter(function (c) { return c.id === charId; })[0] || BZ.CHARACTERS[0];
+      var diff = BZ.DIFFICULTY[difficulty] || BZ.DIFFICULTY.normal;
       var world = BZ.buildGrid();
       world.openDoors = {};
 
@@ -179,7 +181,10 @@
       S = {
         running: true, paused: false, over: false,
         time: 0, shake: 0, flash: 0,
-        round: 0, phase: 'intro', phaseT: 2.4,
+        diff: diff,
+        swings: [],
+        hint: { t: 18, moved: false, aimed: false },
+        round: 0, phase: 'intro', phaseT: 3.2,
         toSpawn: 0, aliveCap: 0, roundKills: 0, roundDrops: 0,
         world: world,
         map: null,
@@ -236,23 +241,48 @@
   function zombieHp(r) {
     return r <= 9 ? 120 + 30 * (r - 1) : Math.round(390 * Math.pow(1.10, r - 9));
   }
-  function zombieSpeed(r) { return Math.min(44 + r * 6.2, 152); }
+  function zombieSpeed(r) { return Math.min(38 + r * 5.6, 140); }
   function isDoggoRound(r) { return r > 0 && r % 5 === 0; }
   function roundCount(r) {
-    return isDoggoRound(r) ? Math.min(24, 6 + r) : Math.min(38, 6 + Math.round(r * 2.4));
+    return isDoggoRound(r) ? Math.min(24, 5 + r) : Math.min(38, 4 + Math.round(r * 2.2));
+  }
+  /* How many may be on the floor at once. The early cap is the single biggest
+     lever on whether round 1 feels learnable or like an ambush. */
+  function aliveCap(r) {
+    return Math.min(isDoggoRound(r) ? 12 : 22, 2 + Math.round(r * 1.7));
+  }
+  /* Rounds 1-2 feed from one window so you learn where they come from,
+     then it widens out. */
+  function activeWindows(r) {
+    var all = S.props.filter(function (p) {
+      return p.type === 'window' && S.unlocked[p.zone];
+    });
+    if (all.length <= 1) return all;
+    if (r <= 2) return all.slice(0, 1);
+    if (r <= 4) return all.slice(0, 2);
+    return all;
   }
 
   function beginRound() {
     S.round += 1;
-    S.toSpawn = roundCount(S.round);
+    S.toSpawn = Math.max(4, Math.round(roundCount(S.round) * S.diff.count));
     S.roundKills = 0;
     S.roundDrops = 0;
     S.run.shotsThisRound = 0;
     S.run.damageThisRound = 0;
-    S.spawnT = 0.9;
+    S.spawnT = S.round === 1 ? 3.0 : 1.4;  // breathing room before the first one
     S.phase = 'active';
     BZ.Audio.roundStart(S.round);
     emit('round', { round: S.round, doggo: isDoggoRound(S.round) });
+
+    // One-time coaching for the two mistakes that end early runs.
+    if (S.round === 1) {
+      setTimeout(function () {
+        if (S && S.running) emit('toast', { text: 'TIP: KEEP MOVING. STANDING STILL IS HOW YOU GET SURROUNDED.', tone: 'good', long: true });
+      }, 3800);
+    } else if (S.round === 3 && Object.keys(S.world.openDoors).length === 0) {
+      emit('toast', { text: 'TIP: BUY A DOOR. ONE ROOM ALWAYS ENDS BADLY — YOU WANT SPACE TO RUN LAPS.', tone: 'good', long: true });
+    }
 
     if (S.round === 10) BZ.Secrets.milestone('round10');
     if (S.round === 15) BZ.Secrets.milestone('round15');
@@ -265,9 +295,7 @@
   function unlockedZones() { return S.unlocked; }
 
   function spawnZombie() {
-    var candidates = S.props.filter(function (p) {
-      return p.type === 'window' && S.unlocked[p.zone];
-    });
+    var candidates = activeWindows(S.round);
     if (!candidates.length) return;
     var win = pick(candidates);
     var doggo = isDoggoRound(S.round);
@@ -287,7 +315,8 @@
       x: win.wx + ox, y: win.wy + oy,
       r: doggo ? 12 : 13,
       hp: hp, maxHp: hp,
-      speed: zombieSpeed(S.round) * (doggo ? 1.85 : 1) * rand(0.9, 1.12),
+      speed: zombieSpeed(S.round) * S.diff.speed * (doggo ? 1.85 : 1) *
+             (S.round <= 3 ? rand(0.94, 1.05) : rand(0.90, 1.12)),
       state: 'outside', win: win, tearT: rand(0.3, 1.2),
       atkCd: 0, phase: rand(0, 6.28), hurtFlash: 0,
       doggo: doggo, skin: pick(skins),
@@ -668,23 +697,22 @@
   function melee() {
     var pl = S.player;
     if (pl.meleeCd > 0) return;
-    pl.meleeCd = 0.55;
+    pl.meleeCd = 0.50;
     BZ.Audio.melee();
-    var aim = BZ.Input.state.aim;
+    // Swings a full circle. Requiring you to aim it as well as press it made
+    // the sword effectively unusable with two thumbs already occupied.
     var dmg = 150 * pl.meleeMul * pl.dmgMul;
+    var reach = MELEE_REACH;
+    S.swings.push({ x: pl.x, y: pl.y - 18, t: 0.30, reach: reach });
     var hitAny = false;
-    for (var i = 0; i < S.zombies.length; i++) {
+    for (var i = S.zombies.length - 1; i >= 0; i--) {
       var z = S.zombies[i];
       if (z.state === 'outside') continue;
-      var dx = z.x - pl.x, dy = z.y - pl.y;
-      var dist = Math.hypot(dx, dy);
-      if (dist > 62) continue;
-      var dot = (dx / dist) * aim.x + (dy / dist) * aim.y;
-      if (dot < 0.30) continue;
+      if (Math.hypot(z.x - pl.x, z.y - pl.y) > reach) continue;
       hitAny = true;
       damageZombie(z, dmg, true);
     }
-    if (hitAny) S.shake = Math.max(S.shake, 4);
+    if (hitAny) S.shake = Math.max(S.shake, 5);
   }
 
   function throwGrenade() {
@@ -825,6 +853,14 @@
     if (BZ.Input.consume('swap')) swapWeapon();
     if (BZ.Input.consume('interact')) doInteract();
 
+    // --- control hint fades once you've actually used each stick
+    if (S.hint.t > 0) {
+      if (inp.sticks.move) S.hint.moved = true;
+      if (inp.sticks.aim) S.hint.aimed = true;
+      if (S.hint.moved && S.hint.aimed) S.hint.t = Math.min(S.hint.t, 1.2);
+      S.hint.t -= dt;
+    }
+
     // --- movement
     var spd = 190 * pl.speedMul * (pl.perks.sprint ? 1.30 : 1);
     if (S.active.lowgrav > 0) spd *= 1.35;
@@ -849,8 +885,8 @@
     } else if (S.phase === 'active') {
       if (S.toSpawn > 0) {
         S.spawnT -= dt;
-        var interval = Math.max(0.22, 1.5 - S.round * 0.06);
-        var cap = Math.min(isDoggoRound(S.round) ? 12 : 22, 5 + S.round * 2);
+        var interval = Math.max(0.30, 2.5 - S.round * 0.10) * S.diff.rate;
+        var cap = Math.max(3, Math.round(aliveCap(S.round) * S.diff.count));
         if (S.spawnT <= 0 && S.zombies.length < cap) {
           spawnZombie();
           S.toSpawn -= 1;
@@ -1110,6 +1146,10 @@
       p.x += p.vx * dt; p.y += p.vy * dt;
       p.vx *= (1 - 3 * dt); p.vy *= (1 - 3 * dt);
     }
+    for (i = S.swings.length - 1; i >= 0; i--) {
+      S.swings[i].t -= dt;
+      if (S.swings[i].t <= 0) S.swings.splice(i, 1);
+    }
     for (i = S.floaters.length - 1; i >= 0; i--) {
       var f = S.floaters[i];
       f.life -= dt;
@@ -1246,6 +1286,19 @@
       }
     }
 
+    // melee swings
+    for (i = 0; i < S.swings.length; i++) {
+      var sw = S.swings[i];
+      var k = 1 - (sw.t / 0.30);
+      ctx.globalAlpha = (1 - k) * 0.85;
+      ctx.strokeStyle = C.toxic;
+      ctx.lineWidth = 5 - k * 3;
+      ctx.beginPath();
+      ctx.ellipse(sw.x, sw.y, sw.reach * (0.45 + k * 0.65), sw.reach * (0.28 + k * 0.42), 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
     // bullets
     ctx.lineCap = 'round';
     for (i = 0; i < S.bullets.length; i++) {
@@ -1305,6 +1358,6 @@
       ctx.fillRect(0, 0, vw, vh);
     }
 
-    BZ.drawSticks(ctx, BZ.Input.state.sticks);
+    BZ.drawSticks(ctx, BZ.Input.state.sticks, S.hint, vw, vh);
   }
 })(window.BZ = window.BZ || {});

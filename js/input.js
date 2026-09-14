@@ -20,6 +20,8 @@
   };
 
   var DEAD = 0.16;
+  var TAP_MS = 260;
+  var TAP_SLOP = 22;
   var RADIUS = 62;
 
   function press(name) { state.queued[name] = true; }
@@ -93,7 +95,8 @@
         var taken = false;
         for (var id in touches) if (touches[id].role === role) taken = true;
         if (taken) continue;
-        touches[t.identifier] = { role: role, ox: p.x, oy: p.y, x: p.x, y: p.y };
+        touches[t.identifier] = { role: role, ox: p.x, oy: p.y, x: p.x, y: p.y,
+                                  t0: Date.now(), moved: 0 };
       }
       recompute();
     }, { passive: false });
@@ -104,8 +107,10 @@
         var t = e.changedTouches[i];
         if (!touches[t.identifier]) continue;
         var p = localPoint(t);
-        touches[t.identifier].x = p.x;
-        touches[t.identifier].y = p.y;
+        var rec = touches[t.identifier];
+        rec.moved = Math.max(rec.moved, Math.hypot(p.x - rec.ox, p.y - rec.oy));
+        rec.x = p.x;
+        rec.y = p.y;
         moved = true;
       }
       if (moved) { e.preventDefault(); recompute(); }
@@ -115,7 +120,16 @@
       var changed = false;
       for (var i = 0; i < e.changedTouches.length; i++) {
         var t = e.changedTouches[i];
-        if (touches[t.identifier]) { delete touches[t.identifier]; changed = true; }
+        var rec = touches[t.identifier];
+        if (!rec) continue;
+        // A quick tap on the aim side (rather than a drag) swings the sword.
+        // Both thumbs are already committed to the sticks, so melee needs a
+        // gesture rather than yet another button to reach for.
+        if (rec.role === 'aim' && rec.moved < TAP_SLOP && (Date.now() - rec.t0) < TAP_MS) {
+          press('melee');
+        }
+        delete touches[t.identifier];
+        changed = true;
       }
       if (changed) recompute();
     }

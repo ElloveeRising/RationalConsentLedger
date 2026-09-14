@@ -138,6 +138,18 @@ p.lede{margin:0;color:var(--dim);font-size:14px;line-height:1.55;}
 }
 .field input:focus{outline:none;border-color:var(--sodium);}
 
+.seg{display:flex;gap:0;border:2px solid var(--line);
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);}
+.seg button{
+  flex:1;background:#120f0d;border:0;border-right:2px solid var(--line);
+  color:var(--dim);font-family:var(--ui);font-weight:800;font-size:12px;
+  letter-spacing:0.14em;text-transform:uppercase;padding:13px 6px;cursor:pointer;
+}
+.seg button:last-child{border-right:0;}
+.seg button[aria-pressed="true"]{background:var(--sodium);color:#14100e;}
+.seg button:focus-visible{outline:3px solid var(--volt);outline-offset:-3px;}
+.seg-blurb{font-size:12px;color:var(--dim);line-height:1.5;margin:0;min-height:2.6em;}
+
 .stats{display:flex;gap:10px;flex-wrap:wrap;}
 .stat{
   flex:1 1 100px;background:var(--panel);border:2px solid var(--line);
@@ -384,7 +396,7 @@ p.lede{margin:0;color:var(--dim);font-size:14px;line-height:1.55;}
         <div class="am" id="wpn-ammo">9<small>/90</small></div>
       </div>
       <div class="actions">
-        <button class="abtn melee" id="btn-melee">SWORD</button>
+        <button class="abtn melee" id="btn-melee">SWORD<span class="ct">or tap</span></button>
         <button class="abtn nade" id="btn-nade">OOF<span class="ct" id="nade-ct">x4</span></button>
         <button class="abtn" id="btn-swap">SWAP<span class="ct" id="swap-ct">—</span></button>
         <button class="abtn" id="btn-reload">RELOAD</button>
@@ -419,6 +431,12 @@ p.lede{margin:0;color:var(--dim);font-size:14px;line-height:1.55;}
       <div class="field">
         <label for="name-input">Who is getting eaten</label>
         <input id="name-input" maxlength="14" placeholder="BLOCKHEAD" autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="field">
+        <label id="diff-label">How rough do you want it</label>
+        <div class="seg" id="diff-seg" role="group" aria-labelledby="diff-label"></div>
+        <p class="seg-blurb" id="diff-blurb"></p>
       </div>
 
       <button class="btn primary" id="btn-play">Start the shift</button>
@@ -469,6 +487,7 @@ p.lede{margin:0;color:var(--dim);font-size:14px;line-height:1.55;}
       <div class="howto">
         <div class="row"><b>Move</b><span>Touch and drag anywhere on the <em>left</em> half of the screen.</span></div>
         <div class="row"><b>Shoot</b><span>Touch and drag on the <em>right</em> half. Drag away from centre to fire in that direction.</span></div>
+        <div class="row"><b>Foam sword</b><span><em>Tap</em> the right half without dragging. It swings all the way around you, so there is nothing to aim.</span></div>
         <div class="row"><b>Buy</b><span>Walk up to a door, wall gun, perk machine or the mystery box. A prompt appears — tap it.</span></div>
         <div class="row"><b>Points</b><span>Hits earn 10, kills earn 60, foam sword kills earn 130. Points are money.</span></div>
         <div class="row"><b>Power</b><span>Perk machines and Pack-a-Punch stay dark until you find the generator.</span></div>

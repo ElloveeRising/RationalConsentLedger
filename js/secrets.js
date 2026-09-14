@@ -15,7 +15,8 @@
     totalKills: 0,
     games: 0,
     bigHead: false,
-    name: ''
+    name: '',
+    difficulty: 'chill'
   };
 
   var progress = null;
@@ -135,6 +136,7 @@
 
     setBigHead: function (v) { progress.bigHead = !!v; save(); },
     setName: function (n) { progress.name = n; save(); },
+    setDifficulty: function (d) { progress.difficulty = d; save(); },
 
     reset: function () {
       progress = JSON.parse(JSON.stringify(DEFAULT_PROGRESS));

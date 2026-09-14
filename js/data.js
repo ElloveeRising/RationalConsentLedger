@@ -168,6 +168,18 @@
   ];
 
   /* --------------------------------------------------------------- BARK LINES */
+  /* ------------------------------------------------------------- DIFFICULTY */
+  // `rate` multiplies the gap between spawns, so higher = calmer.
+  BZ.DIFFICULTY = {
+    chill:  { id: 'chill',  name: 'CHILL',  blurb: 'Slower horde, gentler ramp. Room to learn the controls.',
+              speed: 0.86, count: 0.78, rate: 1.30 },
+    normal: { id: 'normal', name: 'NORMAL', blurb: 'The intended shift.',
+              speed: 1.00, count: 1.00, rate: 1.00 },
+    sweaty: { id: 'sweaty', name: 'SWEATY', blurb: 'Faster, thicker, and it starts immediately.',
+              speed: 1.16, count: 1.28, rate: 0.72 }
+  };
+  BZ.DIFFICULTY_ORDER = ['chill', 'normal', 'sweaty'];
+
   BZ.BARKS = {
     roundStart: ['THEY KEEP COMING', 'MORE OF THEM', 'HERE WE GO AGAIN', 'ROUND UP'],
     buy: ['WORTH IT', 'SPEND SPEND SPEND', 'TREAT YOURSELF'],

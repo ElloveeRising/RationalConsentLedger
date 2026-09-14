@@ -603,7 +603,42 @@
   };
 
   /* ----------------------------------------------------------- STICKS / FX */
-  BZ.drawSticks = function (g, sticks) {
+  /* Idle "ghost" sticks. Nothing on screen said which half of the display
+     does what, so for the first few seconds both zones announce themselves
+     and then get out of the way once you've used them. */
+  function ghostStick(g, cx, cy, label, sub, alpha, accent) {
+    g.save();
+    g.globalAlpha = alpha;
+    g.setLineDash([7, 7]);
+    g.lineWidth = 2;
+    g.strokeStyle = accent;
+    g.beginPath(); g.arc(cx, cy, 58, 0, Math.PI * 2); g.stroke();
+    g.setLineDash([]);
+    g.globalAlpha = alpha * 0.5;
+    g.beginPath(); g.arc(cx, cy, 22, 0, Math.PI * 2); g.fillStyle = accent; g.fill();
+    g.globalAlpha = alpha;
+    g.fillStyle = accent;
+    g.textAlign = 'center';
+    g.font = 'bold 12px "Silkscreen", monospace';
+    g.fillText(label, cx, cy + 84);
+    g.globalAlpha = alpha * 0.8;
+    g.font = '11px "Archivo", sans-serif';
+    g.fillStyle = C.bone;
+    g.fillText(sub, cx, cy + 102);
+    g.restore();
+  }
+
+  BZ.drawSticks = function (g, sticks, hint, vw, vh) {
+    if (hint && hint.t > 0) {
+      var a = Math.min(1, hint.t / 1.2) * 0.62;
+      var cy = vh * 0.58;
+      if (!sticks.move && !hint.moved) {
+        ghostStick(g, vw * 0.24, cy, 'MOVE', 'drag anywhere this side', a, C.bone);
+      }
+      if (!sticks.aim && !hint.aimed) {
+        ghostStick(g, vw * 0.76, cy, 'SHOOT', 'drag to fire · tap to swing', a, C.sodium);
+      }
+    }
     ['move', 'aim'].forEach(function (k) {
       var s = sticks[k];
       if (!s) return;
