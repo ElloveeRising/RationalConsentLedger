@@ -12,7 +12,7 @@ Canonical docs: <https://docs.exa.ai/reference/exa-mcp>
 | --- | --- | --- |
 | Phone / Desktop / Web app | Built-in Exa connector | No |
 | Claude Code on your own machine | Plugin, or this repo's `.mcp.json` | Yes |
-| Claude Code on the web (claude.ai/code) | Not available — see below | N/A |
+| Claude Code on the web (claude.ai/code) | Same connector — it carries over | No |
 
 ### Phone, Desktop, or Web app
 
@@ -53,10 +53,24 @@ Get a key at <https://dashboard.exa.ai/api-keys>.
 
 ### Claude Code on the web
 
-Remote web sessions run in a sandbox whose egress proxy denies `*.exa.ai`
-(the CONNECT tunnel returns `403 Forbidden`). Exa cannot reach the network from
-there, and an API key does not change that. Use Exa locally or via the app
-connector instead.
+The connector works here too. Once it is authorized on your account, the Exa
+tools appear in remote web sessions automatically — no key, no config.
+
+This is worth understanding, because the sandbox *does* block Exa. Direct egress
+to `*.exa.ai` is denied by the environment's proxy:
+
+```
+CONNECT mcp.exa.ai:443 HTTP/1.1
+< HTTP/1.1 403 Forbidden
+```
+
+The connector is unaffected because it is not a direct connection. It routes
+through `mcp-proxy.anthropic.com`, which sits on the proxy's bypass list. So the
+connector reaches Exa where a hand-rolled `.mcp.json` in the same session cannot.
+
+Practical consequence: in a remote session, use the connector. The `.mcp.json` in
+this repo is for Claude Code running on your own machine, where direct egress is
+not restricted.
 
 ## Tools
 
@@ -91,3 +105,58 @@ recent developments in AI agents and summarize the key trends." The
 - `.env` and friends are gitignored. Keep it that way.
 - If a key is ever pasted into a commit, chat, or issue, treat it as burned:
   rotate it at <https://dashboard.exa.ai/api-keys>.
+
+## What it costs
+
+Rates from [Exa's pricing page](https://exa.ai/docs/reference/pricing). Exa is
+pay-as-you-go with no subscription — you are billed per request.
+
+| Endpoint | Price |
+| --- | --- |
+| `/search` — base, up to 10 results, text + highlights included | $7 / 1k requests |
+| each result beyond 10 | $1 / 1k results |
+| `/contents` (`web_fetch_exa`) | $1 / 1k pages, **per content type** |
+| AI page summaries | $1 / 1k pages |
+| `/answer` | $5 / 1k requests |
+
+A "content type" is one view of a page — `text`, `highlights`, or `summary`. One
+page fetched with both `text` and `highlights` bills as two.
+
+So an ordinary search is **$0.007** and a page fetch is **$0.001**. These are
+cheap enough to ignore.
+
+### The Agent API is the exception
+
+`agent_run` is where real money goes. Fixed-effort runs are predictable:
+
+| Effort | Price per run |
+| --- | --- |
+| `minimal` | $0.012 |
+| `low` | $0.025 |
+| `medium` | $0.10 |
+| `high` | $0.50 |
+| `xhigh` | $1.00 |
+
+But the **default effort is `auto`**, which is metered rather than fixed and
+runs up to a **$5 per-run cap**. Beta `max` caps at **$20 per run**. Metered runs
+bill at $0.10 per Agent Compute Unit plus $0.005 per search tool call, with
+contact enrichment charged separately ($0.02 / email, $0.07 / phone number).
+
+One `max` run can therefore cost more than 2,800 ordinary searches.
+
+### Keeping it cheap
+
+- Prefer `web_search_exa` and `web_fetch_exa`. They are the cheap tools and cover
+  most needs.
+- Keep `numResults` at or below 10 — beyond that you pay per extra result.
+- Treat `agent_run` as a deliberate choice, not a default. When you do use it,
+  pass an explicit fixed `effort`, or set `budget.maxCostDollars` to cap a
+  metered run.
+- Skip AI summaries unless you want them; raw text and highlights are already
+  included in the search price.
+
+### Billing safety
+
+With no payment method on the account, the credit balance is a hard ceiling.
+Requests start failing when it runs out; nothing auto-charges. Adding a card for
+automatic top-ups removes that ceiling, so leave it off unless you want it gone.
