@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#14100e">
+<meta name="description" content="A wacky round-based zombie survival game for phones. Blocky characters, a mystery box, perks, and sixteen hidden secrets.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Blockhead Zombies</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Archivo:wght@400;600;800&display=swap">
+<style>
+/* =========================================================================
+   BLOCKHEAD ZOMBIES
+   Palette: sodium-vapour amber on warm concrete. The world is a night-lit
+   facility, so the page commits to one dark theme rather than swapping with
+   the host — every colour is painted explicitly so it holds on any ground.
+   ========================================================================= */
+:root{
+  --void:#14100e;
+  --panel:#1c1714;
+  --panel-2:#252019;
+  --line:#3a322c;
+  --sodium:#ffb02e;
+  --sodium-dim:#c9861f;
+  --toxic:#9ef01a;
+  --red:#e03131;
+  --bone:#f2e9df;
+  --dim:#9c9086;
+  --volt:#4cc9f0;
+  --purple:#c77dff;
+
+  --display:'Silkscreen','Courier New',monospace;
+  --ui:'Archivo','Helvetica Neue',system-ui,sans-serif;
+
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-l:env(safe-area-inset-left,0px);
+  --safe-r:env(safe-area-inset-right,0px);
+  --safe-t:env(safe-area-inset-top,0px);
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--void);}
+body{
+  font-family:var(--ui);
+  color:var(--bone);
+  touch-action:none;
+  user-select:none;
+  -webkit-user-select:none;
+  overscroll-behavior:none;
+}
+#app{position:fixed;inset:0;background:var(--void);}
+
+/* Industrial placard: clipped corners instead of the usual rounded card. */
+.cut{clip-path:polygon(11px 0,100% 0,100% calc(100% - 11px),calc(100% - 11px) 100%,0 100%,0 11px);}
+.cut-sm{clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);}
+
+/* The one recurring flourish. */
+.hazard{
+  background-image:repeating-linear-gradient(45deg,
+    var(--sodium) 0 9px, #14100e 9px 18px);
+}
+
+canvas#stage{position:absolute;inset:0;width:100%;height:100%;display:block;background:var(--void);}
+
+/* ---------------------------------------------------------------- SCREENS */
+.screen{
+  position:absolute;inset:0;z-index:40;
+  display:flex;flex-direction:column;
+  padding:calc(18px + var(--safe-t)) calc(18px + var(--safe-r)) calc(18px + var(--safe-b)) calc(18px + var(--safe-l));
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(255,176,46,0.10), transparent 60%),
+    linear-gradient(180deg,#191411 0%,#14100e 100%);
+  overflow-y:auto;overscroll-behavior:contain;
+}
+.screen[hidden]{display:none !important;}
+.screen-inner{width:100%;max-width:640px;margin:auto;display:flex;flex-direction:column;gap:18px;}
+
+.logo{text-align:center;line-height:0.92;cursor:pointer;}
+.logo b{
+  display:block;font-family:var(--display);font-weight:700;
+  color:var(--bone);letter-spacing:0.02em;
+  font-size:clamp(30px,10vw,58px);
+  text-shadow:0 3px 0 #0d0a08, 0 0 24px rgba(255,176,46,0.28);
+}
+.logo b.accent{color:var(--sodium);font-size:clamp(34px,11.5vw,68px);}
+.logo .sub{
+  margin-top:10px;font-family:var(--ui);font-weight:800;
+  font-size:11px;letter-spacing:0.30em;color:var(--dim);text-transform:uppercase;
+}
+.rule{height:9px;width:100%;}
+
+h2.sect{
+  font-family:var(--display);font-size:15px;font-weight:700;
+  color:var(--sodium);margin:0;letter-spacing:0.02em;
+}
+p.lede{margin:0;color:var(--dim);font-size:14px;line-height:1.55;}
+
+/* Buttons -------------------------------------------------------------- */
+.btn{
+  font-family:var(--ui);font-weight:800;font-size:14px;letter-spacing:0.14em;
+  text-transform:uppercase;
+  background:var(--panel-2);color:var(--bone);
+  border:2px solid var(--line);
+  padding:14px 18px;cursor:pointer;
+  clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+  transition:background .12s ease,color .12s ease,transform .06s ease;
+}
+.btn:hover{background:#2f281f;}
+.btn:active{transform:translateY(1px);}
+.btn:focus-visible{outline:3px solid var(--volt);outline-offset:2px;}
+.btn.primary{
+  background:var(--sodium);color:#14100e;border-color:var(--sodium);
+  font-size:17px;padding:18px;letter-spacing:0.18em;
+}
+.btn.primary:hover{background:#ffc35c;}
+.btn.ghost{background:transparent;}
+.btn.danger{border-color:var(--red);color:#ff8787;}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;}
+.btn-row .btn{flex:1 1 140px;}
+
+.field{display:flex;flex-direction:column;gap:7px;}
+.field label{
+  font-size:10px;letter-spacing:0.24em;text-transform:uppercase;
+  color:var(--dim);font-weight:800;
+}
+.field input{
+  font-family:var(--display);font-size:16px;
+  background:#120f0d;border:2px solid var(--line);color:var(--sodium);
+  padding:13px 14px;width:100%;
+  clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+}
+.field input:focus{outline:none;border-color:var(--sodium);}
+
+.stats{display:flex;gap:10px;flex-wrap:wrap;}
+.stat{
+  flex:1 1 100px;background:var(--panel);border:2px solid var(--line);
+  padding:11px 13px;
+  clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+}
+.stat .k{font-size:9px;letter-spacing:0.22em;color:var(--dim);text-transform:uppercase;font-weight:800;}
+.stat .v{font-family:var(--display);font-size:21px;color:var(--sodium);margin-top:5px;font-variant-numeric:tabular-nums;}
+
+/* Character grid ------------------------------------------------------- */
+.chars{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:11px;}
+.char{
+  background:var(--panel);border:2px solid var(--line);
+  padding:11px;cursor:pointer;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:7px;
+  clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+  transition:border-color .12s ease,background .12s ease;
+}
+.char:hover{background:var(--panel-2);}
+.char.sel{border-color:var(--sodium);background:#2a2117;}
+.char.locked{opacity:0.62;cursor:default;}
+.char canvas{width:74px;height:84px;display:block;image-rendering:pixelated;}
+.char .nm{font-family:var(--display);font-size:10px;color:var(--bone);line-height:1.35;}
+.char.sel .nm{color:var(--sodium);}
+.char .pv{font-size:10.5px;color:var(--toxic);line-height:1.4;font-weight:600;}
+.char .lk{font-size:10.5px;color:var(--dim);line-height:1.4;font-style:italic;}
+
+/* Secrets list --------------------------------------------------------- */
+.secrets{display:flex;flex-direction:column;gap:7px;}
+.sec{
+  display:flex;gap:11px;align-items:flex-start;
+  background:var(--panel);border-left:4px solid var(--line);
+  padding:11px 13px;
+}
+.sec.found{border-left-color:var(--sodium);background:#221b13;}
+.sec .n{
+  font-family:var(--display);font-size:11px;color:var(--dim);
+  min-width:26px;font-variant-numeric:tabular-nums;padding-top:2px;
+}
+.sec.found .n{color:var(--sodium);}
+.sec .b{flex:1;min-width:0;}
+.sec .t{font-family:var(--display);font-size:11.5px;color:var(--bone);line-height:1.4;}
+.sec.found .t{color:var(--sodium);}
+.sec .d{font-size:12px;color:var(--dim);margin-top:4px;line-height:1.5;}
+.sec.found .d{color:#c3b6a8;}
+
+.kbd{
+  display:inline-block;font-family:var(--display);font-size:10px;
+  background:#120f0d;border:1px solid var(--line);padding:3px 6px;color:var(--sodium);
+}
+.howto{display:flex;flex-direction:column;gap:11px;}
+.howto .row{display:flex;gap:12px;align-items:baseline;font-size:13.5px;color:var(--dim);line-height:1.5;}
+.howto .row b{color:var(--bone);font-weight:800;min-width:96px;flex-shrink:0;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;}
+
+/* ------------------------------------------------------------------- HUD */
+#hud{position:absolute;inset:0;z-index:20;pointer-events:none;}
+#hud[hidden]{display:none !important;}
+
+.hud-top{
+  position:absolute;top:calc(8px + var(--safe-t));left:calc(8px + var(--safe-l));right:calc(8px + var(--safe-r));
+  display:flex;align-items:flex-start;gap:8px;
+}
+.chip{
+  background:rgba(28,23,20,0.88);border:2px solid var(--line);
+  padding:6px 10px;backdrop-filter:blur(3px);
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+}
+.chip .k{font-size:8px;letter-spacing:0.2em;color:var(--dim);text-transform:uppercase;font-weight:800;}
+.chip .v{font-family:var(--display);font-size:15px;color:var(--sodium);font-variant-numeric:tabular-nums;line-height:1.25;}
+.chip.pts .v{color:var(--bone);}
+.hud-top .spacer{flex:1;}
+#zone-name{
+  font-family:var(--display);font-size:9.5px;color:var(--dim);
+  text-align:center;align-self:center;letter-spacing:0.04em;
+}
+.icon-btn{
+  pointer-events:auto;width:42px;height:42px;flex-shrink:0;
+  background:rgba(28,23,20,0.88);border:2px solid var(--line);color:var(--bone);
+  font-size:15px;cursor:pointer;display:grid;place-items:center;
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+}
+.icon-btn:active{background:var(--panel-2);}
+
+/* active power-up timers */
+#buffs{
+  position:absolute;top:calc(62px + var(--safe-t));left:calc(8px + var(--safe-l));
+  display:flex;flex-direction:column;gap:5px;
+}
+.buff{
+  font-family:var(--display);font-size:9.5px;padding:4px 8px;color:#14100e;
+  clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px);
+}
+
+/* bottom-left: health + perks */
+.hud-bl{
+  position:absolute;left:calc(10px + var(--safe-l));bottom:calc(10px + var(--safe-b));
+  display:flex;flex-direction:column;gap:7px;width:min(46vw,210px);
+}
+.hpbar{height:15px;background:#120f0d;border:2px solid var(--line);position:relative;overflow:hidden;}
+.hpbar i{
+  display:block;height:100%;background:linear-gradient(90deg,#8a1f1f,var(--red));
+  transition:width .16s ease;
+}
+.hpbar span{
+  position:absolute;inset:0;display:grid;place-items:center;
+  font-family:var(--display);font-size:9px;color:var(--bone);
+  text-shadow:0 1px 2px #000;
+}
+.perks{display:flex;gap:5px;flex-wrap:wrap;}
+.perk-pip{
+  width:22px;height:22px;display:grid;place-items:center;
+  font-family:var(--display);font-size:10px;color:#14100e;font-weight:700;
+  clip-path:polygon(4px 0,100% 0,100% calc(100% - 4px),calc(100% - 4px) 100%,0 100%,0 4px);
+}
+
+/* bottom-right: weapon + actions */
+.hud-br{
+  position:absolute;right:calc(10px + var(--safe-r));bottom:calc(10px + var(--safe-b));
+  display:flex;flex-direction:column;align-items:flex-end;gap:8px;
+}
+.wpn{
+  background:rgba(28,23,20,0.88);border:2px solid var(--line);padding:6px 10px;text-align:right;
+  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+  max-width:56vw;
+}
+.wpn .nm{font-family:var(--display);font-size:10px;color:var(--bone);line-height:1.3;}
+.wpn .am{font-family:var(--display);font-size:16px;color:var(--sodium);font-variant-numeric:tabular-nums;margin-top:2px;}
+.wpn .am small{font-size:10px;color:var(--dim);}
+.wpn.reloading .am{color:var(--volt);}
+
+.actions{display:grid;grid-template-columns:repeat(2,60px);gap:8px;}
+.abtn{
+  pointer-events:auto;width:60px;height:60px;border-radius:50%;
+  background:rgba(37,32,25,0.90);border:2px solid var(--line);color:var(--bone);
+  font-family:var(--display);font-size:9px;cursor:pointer;
+  display:grid;place-items:center;text-align:center;line-height:1.2;padding:2px;
+}
+.abtn:active{background:var(--sodium);color:#14100e;border-color:var(--sodium);}
+.abtn.nade{border-color:#4a5d3a;}
+.abtn.melee{border-color:var(--toxic);}
+.abtn .ct{display:block;font-size:8px;color:var(--dim);margin-top:1px;}
+.abtn:active .ct{color:#14100e;}
+
+/* interact prompt */
+#prompt{
+  position:absolute;left:50%;transform:translateX(-50%);
+  bottom:calc(84px + var(--safe-b));
+  pointer-events:auto;cursor:pointer;
+  background:rgba(28,23,20,0.94);border:2px solid var(--sodium);
+  padding:10px 16px;display:flex;align-items:center;gap:11px;
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  max-width:min(88vw,420px);
+  animation:promptIn .14s ease-out;
+}
+#prompt[hidden]{display:none !important;}
+#prompt.locked{border-color:var(--line);}
+#prompt .lab{font-family:var(--display);font-size:11px;color:var(--bone);line-height:1.35;}
+#prompt .cost{font-family:var(--display);font-size:13px;color:var(--sodium);flex-shrink:0;}
+#prompt .cost.no{color:var(--red);}
+#prompt .key{
+  font-family:var(--display);font-size:9px;color:#14100e;background:var(--sodium);
+  padding:4px 7px;flex-shrink:0;
+}
+@keyframes promptIn{from{opacity:0;transform:translateX(-50%) translateY(6px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
+
+/* round banner */
+#banner{
+  position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;z-index:25;
+}
+#banner[hidden]{display:none !important;}
+#banner .inner{text-align:center;animation:bannerIn .5s ease-out;}
+#banner .r{
+  font-family:var(--display);font-size:clamp(26px,9vw,52px);color:var(--sodium);
+  text-shadow:0 4px 0 #0d0a08,0 0 32px rgba(255,176,46,0.5);letter-spacing:0.04em;
+}
+#banner .s{
+  font-family:var(--ui);font-weight:800;font-size:11px;letter-spacing:0.3em;
+  color:var(--bone);text-transform:uppercase;margin-top:8px;
+}
+#banner.doggo .r{color:var(--red);text-shadow:0 4px 0 #0d0a08,0 0 32px rgba(224,49,49,0.55);}
+@keyframes bannerIn{from{opacity:0;transform:scale(0.86);}to{opacity:1;transform:scale(1);}}
+
+/* toasts */
+#toasts{
+  position:absolute;top:calc(64px + var(--safe-t));right:calc(10px + var(--safe-r));
+  display:flex;flex-direction:column;gap:6px;align-items:flex-end;z-index:30;
+  max-width:min(74vw,330px);
+}
+.toast{
+  background:rgba(28,23,20,0.94);border-left:4px solid var(--sodium);
+  padding:8px 12px;font-size:12px;line-height:1.45;color:var(--bone);
+  font-weight:600;animation:toastIn .18s ease-out;
+}
+.toast.bad{border-left-color:var(--red);color:#ffc9c9;}
+.toast.good{border-left-color:var(--toxic);}
+.toast.secret{border-left-color:var(--purple);color:#e8d5ff;}
+.toast.long{font-size:11.5px;font-style:italic;}
+@keyframes toastIn{from{opacity:0;transform:translateX(14px);}to{opacity:1;transform:translateX(0);}}
+
+/* portrait nudge */
+#rotate{
+  position:absolute;left:50%;transform:translateX(-50%);
+  top:calc(58px + var(--safe-t));z-index:31;
+  background:rgba(28,23,20,0.94);border:2px solid var(--line);
+  padding:7px 12px;font-size:11px;color:var(--dim);pointer-events:auto;cursor:pointer;
+}
+#rotate[hidden]{display:none !important;}
+
+@media (min-width:760px){
+  .abtn{width:66px;height:66px;}
+  .actions{grid-template-columns:repeat(2,66px);}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:0.01ms !important;transition-duration:0.01ms !important;}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="stage"></canvas>
+
+  <!-- ============================================================== HUD -->
+  <div id="hud" hidden>
+    <div class="hud-top">
+      <div class="chip"><div class="k">Round</div><div class="v" id="hud-round">1</div></div>
+      <div class="chip pts"><div class="k">Points</div><div class="v" id="hud-points">500</div></div>
+      <div class="spacer"></div>
+      <div id="zone-name"></div>
+      <div class="spacer"></div>
+      <div class="chip"><div class="k">Secrets</div><div class="v" id="hud-secrets">0/16</div></div>
+      <button class="icon-btn" id="btn-pause" aria-label="Pause">❚❚</button>
+    </div>
+
+    <div id="buffs"></div>
+
+    <div class="hud-bl">
+      <div class="hpbar"><i id="hp-fill" style="width:100%"></i><span id="hp-text">100</span></div>
+      <div class="perks" id="perk-row"></div>
+    </div>
+
+    <div class="hud-br">
+      <div class="wpn" id="wpn">
+        <div class="nm" id="wpn-name">PEA SHOOTER</div>
+        <div class="am" id="wpn-ammo">9<small>/90</small></div>
+      </div>
+      <div class="actions">
+        <button class="abtn melee" id="btn-melee">SWORD</button>
+        <button class="abtn nade" id="btn-nade">OOF<span class="ct" id="nade-ct">x4</span></button>
+        <button class="abtn" id="btn-swap">SWAP<span class="ct" id="swap-ct">—</span></button>
+        <button class="abtn" id="btn-reload">RELOAD</button>
+      </div>
+    </div>
+
+    <div id="prompt" hidden>
+      <span class="key">E</span>
+      <span class="lab" id="prompt-label"></span>
+      <span class="cost" id="prompt-cost"></span>
+    </div>
+
+    <div id="banner" hidden><div class="inner">
+      <div class="r" id="banner-round">ROUND 1</div>
+      <div class="s" id="banner-sub">THEY KEEP COMING</div>
+    </div></div>
+
+    <div id="toasts"></div>
+    <button id="rotate" hidden>Turn your phone sideways for the full view — tap to dismiss</button>
+  </div>
+
+  <!-- =========================================================== TITLE -->
+  <div class="screen" id="screen-title">
+    <div class="screen-inner">
+      <div class="logo" id="logo">
+        <b>BLOCKHEAD</b>
+        <b class="accent">ZOMBIES</b>
+        <div class="sub">Round-based survival · 16 secrets</div>
+      </div>
+      <div class="rule hazard cut-sm"></div>
+
+      <div class="field">
+        <label for="name-input">Who is getting eaten</label>
+        <input id="name-input" maxlength="14" placeholder="BLOCKHEAD" autocomplete="off" spellcheck="false">
+      </div>
+
+      <button class="btn primary" id="btn-play">Start the shift</button>
+
+      <div class="btn-row">
+        <button class="btn" id="btn-chars">Characters</button>
+        <button class="btn" id="btn-secrets">Secrets</button>
+        <button class="btn" id="btn-howto">How to play</button>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><div class="k">Best round</div><div class="v" id="st-best">0</div></div>
+        <div class="stat"><div class="k">Secrets</div><div class="v" id="st-secrets">0/16</div></div>
+        <div class="stat"><div class="k">Total oofs</div><div class="v" id="st-kills">0</div></div>
+      </div>
+
+      <p class="lede" id="install-line" hidden>
+        Tip: add this to your home screen and it runs offline like a real app.
+        <button class="btn ghost" id="btn-install" style="margin-top:10px;width:100%;">Install</button>
+      </p>
+    </div>
+  </div>
+
+  <!-- ======================================================= CHARACTERS -->
+  <div class="screen" id="screen-chars" hidden>
+    <div class="screen-inner">
+      <h2 class="sect">PICK YOUR BLOCKHEAD</h2>
+      <p class="lede">Everyone plays differently. Locked ones are earned by finding things.</p>
+      <div class="chars" id="char-grid"></div>
+      <button class="btn" data-back>Back</button>
+    </div>
+  </div>
+
+  <!-- ========================================================== SECRETS -->
+  <div class="screen" id="screen-secrets" hidden>
+    <div class="screen-inner">
+      <h2 class="sect">SECRETS <span id="sec-count"></span></h2>
+      <p class="lede">Found secrets stay found. Hints show for the ones you haven't cracked.</p>
+      <div class="secrets" id="secrets-list"></div>
+      <button class="btn" data-back>Back</button>
+    </div>
+  </div>
+
+  <!-- ============================================================ HOWTO -->
+  <div class="screen" id="screen-howto" hidden>
+    <div class="screen-inner">
+      <h2 class="sect">HOW TO PLAY</h2>
+      <div class="howto">
+        <div class="row"><b>Move</b><span>Touch and drag anywhere on the <em>left</em> half of the screen.</span></div>
+        <div class="row"><b>Shoot</b><span>Touch and drag on the <em>right</em> half. Drag away from centre to fire in that direction.</span></div>
+        <div class="row"><b>Buy</b><span>Walk up to a door, wall gun, perk machine or the mystery box. A prompt appears — tap it.</span></div>
+        <div class="row"><b>Points</b><span>Hits earn 10, kills earn 60, foam sword kills earn 130. Points are money.</span></div>
+        <div class="row"><b>Power</b><span>Perk machines and Pack-a-Punch stay dark until you find the generator.</span></div>
+        <div class="row"><b>Windows</b><span>Zombies tear the boards off. Tap the reboard prompt to nail them back for points.</span></div>
+        <div class="row"><b>Every 5th</b><span>Doggo round. They are fast. They are rude.</span></div>
+        <div class="row"><b>Keyboard</b><span><span class="kbd">WASD</span> move · mouse aim · click to fire · <span class="kbd">R</span> reload · <span class="kbd">E</span> interact · <span class="kbd">F</span> sword · <span class="kbd">G</span> grenade · <span class="kbd">Q</span> swap</span></div>
+      </div>
+      <button class="btn" data-back>Back</button>
+    </div>
+  </div>
+
+  <!-- ============================================================ PAUSE -->
+  <div class="screen" id="screen-pause" hidden>
+    <div class="screen-inner">
+      <h2 class="sect">PAUSED</h2>
+      <div class="rule hazard cut-sm"></div>
+      <button class="btn primary" id="btn-resume">Resume</button>
+      <div class="btn-row">
+        <button class="btn" id="btn-mute">Sound: on</button>
+        <button class="btn" id="btn-howto2">How to play</button>
+      </div>
+      <button class="btn danger" id="btn-quit">Give up</button>
+    </div>
+  </div>
+
+  <!-- ======================================================== GAME OVER -->
+  <div class="screen" id="screen-over" hidden>
+    <div class="screen-inner">
+      <div class="logo"><b class="accent" id="over-title">OOF</b></div>
+      <p class="lede" id="over-line"></p>
+      <div class="rule hazard cut-sm"></div>
+      <div class="stats">
+        <div class="stat"><div class="k">Round</div><div class="v" id="ov-round">0</div></div>
+        <div class="stat"><div class="k">Oofs</div><div class="v" id="ov-kills">0</div></div>
+        <div class="stat"><div class="k">Survived</div><div class="v" id="ov-time">0s</div></div>
+      </div>
+      <div id="ov-new"></div>
+      <button class="btn primary" id="btn-again">Run it back</button>
+      <div class="btn-row">
+        <button class="btn" id="btn-share">Share score</button>
+        <button class="btn" id="btn-menu">Main menu</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/mapdata.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/secrets.js"></script>
+<script src="js/input.js"></script>
+<script src="js/render.js"></script>
+<script src="js/game.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
