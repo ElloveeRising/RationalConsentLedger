@@ -110,6 +110,59 @@
     { kind: 'jukebox',  id: 'jukebox', zone: 'loot',  x: 28, y: 17 }
   ];
 
+  /* ------------------------------------------------------------- TERRAIN
+     Things in the rooms you can actually do something with.
+       barrel  — shoot it, it goes off, takes the horde with it
+       crate   — shoot it open for points or ammo
+       bounce  — obby pad; step on it and get launched
+       goo     — slows anything walking through
+       zap     — buyable floor plate that cooks whatever stands on it
+     Barrels and crates come back at the start of each round. */
+  BZ.TERRAIN = [
+    // THE LOBBY
+    { kind: 'barrel', zone: 'lobby', x: 5,  y: 24 },
+    { kind: 'barrel', zone: 'lobby', x: 15, y: 29 },
+    { kind: 'crate',  zone: 'lobby', x: 8,  y: 31 },
+    { kind: 'crate',  zone: 'lobby', x: 12, y: 24 },
+    { kind: 'zap',    zone: 'lobby', x: 10, y: 30 },
+
+    // OBBY HALL — it is an obby, it gets the pads
+    { kind: 'bounce', zone: 'obby',  x: 6,  y: 15 },
+    { kind: 'bounce', zone: 'obby',  x: 14, y: 11 },
+    { kind: 'barrel', zone: 'obby',  x: 16, y: 13 },
+    { kind: 'crate',  zone: 'obby',  x: 8,  y: 9  },
+    { kind: 'zap',    zone: 'obby',  x: 11, y: 17 },
+
+    // GENERATOR BAY
+    { kind: 'barrel', zone: 'power', x: 24, y: 27 },
+    { kind: 'barrel', zone: 'power', x: 31, y: 23 },
+    { kind: 'barrel', zone: 'power', x: 34, y: 29 },
+    { kind: 'crate',  zone: 'power', x: 27, y: 31 },
+    { kind: 'zap',    zone: 'power', x: 30, y: 25 },
+
+    // THE LOOT CAVE
+    { kind: 'goo',    zone: 'loot',  x: 26, y: 10 },
+    { kind: 'goo',    zone: 'loot',  x: 31, y: 15 },
+    { kind: 'bounce', zone: 'loot',  x: 24, y: 14 },
+    { kind: 'crate',  zone: 'loot',  x: 33, y: 11 },
+    { kind: 'barrel', zone: 'loot',  x: 29, y: 9  },
+    { kind: 'zap',    zone: 'loot',  x: 30, y: 12 },
+
+    // ADMIN WING
+    { kind: 'barrel', zone: 'admin', x: 44, y: 18 },
+    { kind: 'crate',  zone: 'admin', x: 40, y: 22 },
+    { kind: 'goo',    zone: 'admin', x: 43, y: 24 },
+    { kind: 'zap',    zone: 'admin', x: 41, y: 19 }
+  ];
+
+  BZ.TERRAIN_SPEC = {
+    barrel: { r: 26, hp: 1,  blast: 118, dmg: 640, respawn: true },
+    crate:  { r: 24, hp: 3,  respawn: true },
+    bounce: { r: 30, power: 560, cd: 0.7 },
+    goo:    { r: 40, slow: 0.42 },
+    zap:    { r: 34, cost: 750, dur: 22, dps: 260 }
+  };
+
   BZ.SPAWN_TILE = { x: 10, y: 28 }; // player start, in the lobby
 
   /* ------------------------------------------------------------------ BUILD */

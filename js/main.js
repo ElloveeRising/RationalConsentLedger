@@ -10,13 +10,15 @@
 
   var selectedChar = 'chad';
   var selectedDiff = BZ.Secrets.progress.difficulty || 'chill';
+  var selectedClass = BZ.Secrets.progress.cls || 'goober';
   var lastHud = { points: 0 };
   var bannerT = 0;
   var installEvent = null;
   var lastResult = null;
+  var wonThisRun = false;
 
   /* ---------------------------------------------------------------- SCREENS */
-  var SCREENS = ['screen-title', 'screen-chars', 'screen-secrets', 'screen-howto', 'screen-pause', 'screen-over'];
+  var SCREENS = ['screen-title', 'screen-chars', 'screen-classes', 'screen-secrets', 'screen-howto', 'screen-pause', 'screen-over'];
   var screenStack = ['screen-title'];
 
   function show(id) {
@@ -97,6 +99,51 @@
     });
   }
 
+  /* ---------------------------------------------------------- CLASS GRID */
+  function buildClassGrid() {
+    var grid = $('class-grid');
+    grid.innerHTML = '';
+    BZ.CLASSES.forEach(function (cl) {
+      var card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'char' + (cl.id === selectedClass ? ' sel' : '');
+
+      var glyph = document.createElement('div');
+      glyph.className = 'glyph';
+      glyph.style.background = cl.color;
+      glyph.textContent = cl.icon;
+      card.appendChild(glyph);
+
+      var nm = document.createElement('div');
+      nm.className = 'nm';
+      nm.textContent = cl.name;
+      card.appendChild(nm);
+
+      var ab = document.createElement('div');
+      ab.className = 'ab';
+      ab.textContent = cl.ability + '  ·  ' + cl.cd + 's';
+      card.appendChild(ab);
+
+      var pv = document.createElement('div');
+      pv.className = 'pv';
+      pv.textContent = cl.blurb;
+      card.appendChild(pv);
+
+      var lk = document.createElement('div');
+      lk.className = 'lk';
+      lk.textContent = cl.tag;
+      card.appendChild(lk);
+
+      card.addEventListener('click', function () {
+        selectedClass = cl.id;
+        BZ.Secrets.setClass(cl.id);
+        buildClassGrid();
+        BZ.Audio.init(); BZ.Audio.buy();
+      });
+      grid.appendChild(card);
+    });
+  }
+
   /* ----------------------------------------------------------- DIFFICULTY */
   function buildDifficulty() {
     var seg = $('diff-seg');
@@ -111,6 +158,7 @@
         selectedDiff = id;
         BZ.Secrets.setDifficulty(id);
         buildDifficulty();
+  buildClassGrid();
         BZ.Audio.init(); BZ.Audio.buy();
       });
       seg.appendChild(b);
@@ -186,6 +234,13 @@
       : h.ammo + '<small>/' + h.reserve + '</small>';
     $('wpn').className = 'wpn' + (h.reloading ? ' reloading' : '');
 
+    if (h.cls) {
+      var ab = $('btn-ability');
+      ab.style.setProperty('--ability', h.cls.color);
+      $('ability-label').textContent = h.cls.ability.split(' ')[0];
+      ab.classList.toggle('ready', !!h.abilityReady);
+      ab.title = h.cls.ability + ' — ' + h.cls.blurb;
+    }
     $('nade-ct').textContent = 'x' + h.grenades;
     $('swap-ct').textContent = h.alt ? h.alt.slice(0, 8) : '—';
 
@@ -256,6 +311,13 @@
       case 'round': showBanner(payload.round, payload.doggo); break;
       case 'cleared': toast('ROUND ' + payload.round + ' CLEARED', 'good'); break;
       case 'gameover': onGameOver(payload); break;
+      case 'interloper':
+        toast(payload.name + ': "' + payload.line + '"', 'secret');
+        break;
+      case 'win':
+        wonThisRun = true;
+        toast('YOU BEAT THE SHIFT. ROUND ' + payload.round + '. KEEP GOING IF YOU DARE.', 'secret', true);
+        break;
     }
   });
 
@@ -267,9 +329,12 @@
 
   function onGameOver(r) {
     lastResult = r;
-    $('over-title').textContent = r.round >= 15 ? 'LEGEND' : r.round >= 8 ? 'RESPECT' : 'OOF';
-    $('over-line').textContent = r.name + ' as ' + r.char.name + ' — ' +
-      (r.round >= 15 ? 'the horde will speak of this.'
+    $('over-title').textContent = wonThisRun ? 'SHIFT COMPLETE'
+      : r.round >= 15 ? 'LEGEND' : r.round >= 8 ? 'RESPECT' : 'OOF';
+    $('over-line').textContent = r.name + ' as ' + r.char.name +
+      (r.cls ? ', ' + r.cls.name : '') + ' — ' +
+      (wonThisRun ? 'you finished the shift. the possums are still dancing.'
+        : r.round >= 15 ? 'the horde will speak of this.'
         : r.round >= 8 ? 'a genuinely solid shift.'
         : 'the horde was unimpressed.');
     $('ov-round').textContent = r.round;
@@ -309,7 +374,8 @@
     // If the chosen character got locked out somehow, fall back to a default.
     if (!BZ.Secrets.charUnlocked(selectedChar)) selectedChar = 'chad';
     toGame();
-    BZ.Game.start(selectedChar, nm || 'BLOCKHEAD', selectedDiff);
+    wonThisRun = false;
+    BZ.Game.start(selectedChar, nm || 'BLOCKHEAD', selectedDiff, selectedClass);
     checkOrientation();
   }
 
@@ -322,6 +388,7 @@
   });
 
   $('btn-chars').addEventListener('click', function () { buildCharGrid(); openScreen('screen-chars'); });
+  $('btn-classes').addEventListener('click', function () { buildClassGrid(); openScreen('screen-classes'); });
   $('btn-secrets').addEventListener('click', function () { buildSecrets(); openScreen('screen-secrets'); });
   $('btn-howto').addEventListener('click', function () { openScreen('screen-howto'); });
   $('btn-howto2').addEventListener('click', function () { openScreen('screen-howto'); });
@@ -382,6 +449,7 @@
   bindAction('btn-nade', 'grenade');
   bindAction('btn-swap', 'swap');
   bindAction('prompt', 'interact');
+  bindAction('btn-ability', 'ability');
 
   // --- share
   $('btn-share').addEventListener('click', function () {
@@ -441,6 +509,12 @@
 
     BZ.Game.update(dt);
     BZ.Game.render();
+
+    var S = BZ.Game.state();
+    if (S && S.running && S.player) {
+      var frac = S.player.cls.cd > 0 ? S.player.abilityCd / S.player.cls.cd : 0;
+      $('ability-sweep').style.setProperty('--cd', (Math.max(0, frac) * 360).toFixed(0) + 'deg');
+    }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
@@ -451,6 +525,7 @@
   refreshTitleStats();
   buildCharGrid();
   buildDifficulty();
+  buildClassGrid();
 
   // Kick the audio context awake on the very first interaction of any kind.
   ['touchstart', 'mousedown', 'keydown'].forEach(function (ev) {

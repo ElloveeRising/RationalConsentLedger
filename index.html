@@ -176,6 +176,15 @@ p.lede{margin:0;color:var(--dim);font-size:14px;line-height:1.55;}
 .char.sel .nm{color:var(--sodium);}
 .char .pv{font-size:10.5px;color:var(--toxic);line-height:1.4;font-weight:600;}
 .char .lk{font-size:10.5px;color:var(--dim);line-height:1.4;font-style:italic;}
+.char .glyph{
+  width:58px;height:58px;display:grid;place-items:center;
+  font-family:var(--display);font-size:24px;color:#14100e;font-weight:700;
+  clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);
+}
+.char .ab{
+  font-family:var(--display);font-size:9.5px;color:var(--sodium);
+  letter-spacing:0.04em;line-height:1.4;
+}
 
 /* Secrets list --------------------------------------------------------- */
 .secrets{display:flex;flex-direction:column;gap:7px;}
@@ -279,6 +288,25 @@ p.lede{margin:0;color:var(--dim);font-size:14px;line-height:1.55;}
 .wpn .am{font-family:var(--display);font-size:16px;color:var(--sodium);font-variant-numeric:tabular-nums;margin-top:2px;}
 .wpn .am small{font-size:10px;color:var(--dim);}
 .wpn.reloading .am{color:var(--volt);}
+
+/* Ability sits above the action cluster: big target, cooldown shown as a
+   sweep so you can read readiness without looking away from the fight. */
+.ability{
+  pointer-events:auto;position:relative;width:76px;height:76px;border-radius:50%;
+  background:rgba(37,32,25,0.94);border:3px solid var(--line);color:var(--bone);
+  font-family:var(--display);font-size:9px;cursor:pointer;
+  display:grid;place-items:center;text-align:center;line-height:1.2;padding:4px;
+  overflow:hidden;
+}
+.ability .sweep{
+  position:absolute;inset:0;border-radius:50%;pointer-events:none;
+  background:conic-gradient(rgba(20,16,14,0.78) var(--cd,0deg), transparent 0deg);
+}
+.ability .lbl{position:relative;z-index:1;}
+.ability.ready{border-color:var(--ability,#9ef01a);box-shadow:0 0 14px rgba(158,240,26,0.35);}
+.ability.ready .lbl{color:var(--ability,#9ef01a);}
+.ability:active{background:var(--ability,#9ef01a);}
+.ability:active .lbl{color:#14100e;}
 
 .actions{display:grid;grid-template-columns:repeat(2,60px);gap:8px;}
 .abtn{
@@ -395,6 +423,10 @@ p.lede{margin:0;color:var(--dim);font-size:14px;line-height:1.55;}
         <div class="nm" id="wpn-name">PEA SHOOTER</div>
         <div class="am" id="wpn-ammo">9<small>/90</small></div>
       </div>
+      <button class="ability" id="btn-ability">
+        <span class="sweep" id="ability-sweep"></span>
+        <span class="lbl" id="ability-label">POUND</span>
+      </button>
       <div class="actions">
         <button class="abtn melee" id="btn-melee">SWORD<span class="ct">or tap</span></button>
         <button class="abtn nade" id="btn-nade">OOF<span class="ct" id="nade-ct">x4</span></button>
@@ -443,6 +475,7 @@ p.lede{margin:0;color:var(--dim);font-size:14px;line-height:1.55;}
 
       <div class="btn-row">
         <button class="btn" id="btn-chars">Characters</button>
+        <button class="btn" id="btn-classes">Classes</button>
         <button class="btn" id="btn-secrets">Secrets</button>
         <button class="btn" id="btn-howto">How to play</button>
       </div>
@@ -470,6 +503,16 @@ p.lede{margin:0;color:var(--dim);font-size:14px;line-height:1.55;}
     </div>
   </div>
 
+  <!-- ========================================================== CLASSES -->
+  <div class="screen" id="screen-classes" hidden>
+    <div class="screen-inner">
+      <h2 class="sect">PICK YOUR CLASS</h2>
+      <p class="lede">The character is your face and your passive. The class is the button you mash when things go wrong.</p>
+      <div class="chars" id="class-grid"></div>
+      <button class="btn" data-back>Back</button>
+    </div>
+  </div>
+
   <!-- ========================================================== SECRETS -->
   <div class="screen" id="screen-secrets" hidden>
     <div class="screen-inner">
@@ -492,7 +535,10 @@ p.lede{margin:0;color:var(--dim);font-size:14px;line-height:1.55;}
         <div class="row"><b>Points</b><span>Hits earn 10, kills earn 60, foam sword kills earn 130. Points are money.</span></div>
         <div class="row"><b>Power</b><span>Perk machines and Pack-a-Punch stay dark until you find the generator.</span></div>
         <div class="row"><b>Windows</b><span>Zombies tear the boards off. Tap the reboard prompt to nail them back for points.</span></div>
+        <div class="row"><b>Ability</b><span>The big round button on the right is your class ability. The ring shows the cooldown.</span></div>
+        <div class="row"><b>Terrain</b><span>Shoot red barrels near the horde. Break crates for points. Green pads launch you. Goo slows anything walking in it.</span></div>
         <div class="row"><b>Every 5th</b><span>Doggo round. They are fast. They are rude.</span></div>
+        <div class="row"><b>Round 20</b><span>Finish the shift and the possums throw you a party.</span></div>
         <div class="row"><b>Keyboard</b><span><span class="kbd">WASD</span> move · mouse aim · click to fire · <span class="kbd">R</span> reload · <span class="kbd">E</span> interact · <span class="kbd">F</span> sword · <span class="kbd">G</span> grenade · <span class="kbd">Q</span> swap</span></div>
       </div>
       <button class="btn" data-back>Back</button>
@@ -540,6 +586,8 @@ p.lede{margin:0;color:var(--dim);font-size:14px;line-height:1.55;}
 <script src="js/secrets.js"></script>
 <script src="js/input.js"></script>
 <script src="js/render.js"></script>
+<script src="js/crew.js"></script>
+<script src="js/possum.js"></script>
 <script src="js/game.js"></script>
 <script src="js/main.js"></script>
 </body>

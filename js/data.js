@@ -49,6 +49,37 @@
       dmg: 900, pellets: 1, spread: 0.01, rpm: 50, mag: 4, reserve: 16,
       reload: 3.0, speed: 540, range: 900, splash: 115, rarity: 2, ammoCost: 900
     },
+    crossbow: {
+      id: 'crossbow', name: 'CROSSBOW OF CONSEQUENCES', kind: 'bow',
+      dmg: 260, pellets: 1, spread: 0.006, rpm: 110, mag: 8, reserve: 64,
+      reload: 2.1, speed: 1250, range: 1100, pierce: 6, rarity: 3, ammoCost: 700
+    },
+    blower: {
+      id: 'blower', name: 'THE LEAF BLOWER', kind: 'blower',
+      dmg: 11, pellets: 4, spread: 0.42, rpm: 1100, mag: 180, reserve: 540,
+      reload: 2.0, speed: 560, range: 250, knockback: 320, rarity: 3, ammoCost: 450
+    },
+    bees: {
+      id: 'bees', name: 'THE BEE CANNON', kind: 'bees',
+      dmg: 60, pellets: 3, spread: 0.55, rpm: 240, mag: 36, reserve: 216,
+      reload: 2.6, speed: 380, range: 900, homing: 3.4, rarity: 2, ammoCost: 800
+    },
+    quad: {
+      id: 'quad', name: 'QUAD-BARREL BRAINROT', kind: 'shotgun',
+      dmg: 44, pellets: 16, spread: 0.40, rpm: 60, mag: 4, reserve: 40,
+      reload: 3.1, speed: 700, range: 300, knockback: 180, rarity: 2, ammoCost: 800,
+      shellReload: true
+    },
+    airhorn: {
+      id: 'airhorn', name: 'THE AIRHORN', kind: 'horn',
+      dmg: 26, pellets: 5, spread: 0.50, rpm: 180, mag: 24, reserve: 120,
+      reload: 1.8, speed: 640, range: 300, stun: 2.2, rarity: 3, ammoCost: 500
+    },
+    stapler: {
+      id: 'stapler', name: 'THE STAPLER', kind: 'meme',
+      dmg: 16, pellets: 1, spread: 0.10, rpm: 1500, mag: 300, reserve: 900,
+      reload: 1.2, speed: 900, range: 420, rarity: 2, ammoCost: 150, joke: true
+    },
     mop: {
       id: 'mop', name: 'THE WET MOP', kind: 'meme',
       dmg: 9, pellets: 3, spread: 0.5, rpm: 1400, mag: 200, reserve: 600,
@@ -66,10 +97,17 @@
     sniper: 'THE WIFI KILLER',
     ray: 'OOF CANNON XL',
     tube: 'NOOB NUKE',
-    mop: 'THE DAMP DESTROYER'
+    mop: 'THE DAMP DESTROYER',
+    crossbow: 'CROSSBOW OF SEVERE CONSEQUENCES',
+    blower: 'THE LEAF OBLITERATOR',
+    bees: 'THE ENTIRE HIVE',
+    quad: 'OCTA-BARREL TERMINAL BRAINROT',
+    airhorn: 'THE FOGHORN OF JUDGEMENT',
+    stapler: 'THE INDUSTRIAL STAPLER'
   };
 
-  BZ.BOX_POOL = ['smg', 'shotgun', 'ar', 'lmg', 'sniper', 'ray', 'tube', 'mop'];
+  BZ.BOX_POOL = ['smg', 'shotgun', 'ar', 'lmg', 'sniper', 'ray', 'tube', 'mop',
+                 'crossbow', 'blower', 'bees', 'quad', 'airhorn', 'stapler'];
 
   /* ------------------------------------------------------------------ PERKS */
   BZ.PERKS = {
@@ -106,7 +144,43 @@
     fire:     { id: 'fire',     name: 'FIRE SALE',    color: '#4cc9f0', glyph: 'S', dur: 25 }
   };
 
-  /* ------------------------------------------------------------- CHARACTERS */
+  /* ------------------------------------------------------------------ CLASSES
+     A class is the active ability; the character is the passive and the face.
+     You pick both, so the combinations are the build. */
+  BZ.CLASSES = [
+    {
+      id: 'goober', name: 'THE GOOBER', ability: 'GROUND POUND',
+      tag: 'Structurally a beanbag. Emotionally unavailable.',
+      blurb: 'Slam the floor. Everything nearby goes flying.',
+      color: '#9ef01a', cd: 11, hp: 90, speed: 0.92, icon: 'G'
+    },
+    {
+      id: 'gremlin', name: 'GREMLIN ENGINEER', ability: 'DEPLOY TURRET',
+      tag: 'Found the toolbox. Nobody gave him the toolbox.',
+      blurb: 'Drop a sentry gun that shoots for you. Lasts 26 seconds.',
+      color: '#ffb02e', cd: 24, hp: 0, speed: 1, icon: 'E'
+    },
+    {
+      id: 'summoner', name: 'SUMMONER OF MID', ability: 'RAISE THE BOYS',
+      tag: 'Necromancer, but the summons are deeply average.',
+      blurb: 'Nearby corpses get back up on your side. They try their best.',
+      color: '#c77dff', cd: 20, hp: 0, speed: 1, icon: 'S'
+    },
+    {
+      id: 'yapper', name: 'THE YAPPER', ability: 'YAP',
+      tag: 'Has not stopped talking since round one.',
+      blurb: 'Out-talk the horde. Everything nearby freezes and takes damage.',
+      color: '#4cc9f0', cd: 15, hp: 0, speed: 1, icon: 'Y'
+    },
+    {
+      id: 'speedrunner', name: 'SIGMA SPEEDRUNNER', ability: 'ZOOM',
+      tag: 'Frame-perfect. Extremely fragile. No notes.',
+      blurb: 'Dash straight through the horde, hurting everything you clip.',
+      color: '#e03131', cd: 8, hp: -25, speed: 1.22, icon: 'Z'
+    }
+  ];
+
+  /* --------------------------------------------------------------- CHARACTERS */
   // `skin` drives the blocky renderer. `perk` is a passive applied at spawn.
   BZ.CHARACTERS = [
     {
@@ -166,6 +240,78 @@
       unlockedBy: 'admin', hint: 'Uncover 15 secrets.'
     }
   ];
+
+  /* ------------------------------------------------------------- INTERLOPERS
+     Non-hostile weirdos who wander in between the hordes, say one thing, do
+     one thing, and leave. `weight` biases the random pick. */
+  BZ.INTERLOPERS = [
+    {
+      id: 'janitor', name: 'SIGMA JANITOR', line: 'NOT MY SHIFT.',
+      behaviour: 'cross', effect: 'points', amount: 150, weight: 5, speed: 62,
+      skin: { skin: '#c98b4b', shirt: '#2f6f4f', pants: '#2a2520', hair: '#1b1b1f', hat: null, wide: 1.05 },
+      prop: 'mop'
+    },
+    {
+      id: 'greg', name: 'NPC GREG', line: 'HELLO, TRAVELLER.',
+      behaviour: 'idle', effect: 'none', weight: 6, speed: 0, dur: 14,
+      skin: { skin: '#e9c46a', shirt: '#6b7280', pants: '#4b5563', hair: '#3f3f46', hat: null, wide: 1 },
+      repeat: true
+    },
+    {
+      id: 'taxman', name: 'THE SNACK TAXMAN', line: 'TAXED.',
+      behaviour: 'follow', effect: 'steal', amount: 75, weight: 4, speed: 150, dur: 9,
+      skin: { skin: '#f6d6c2', shirt: '#1b1b1f', pants: '#1b1b1f', hair: null, hat: 'top', wide: 0.95 }
+    },
+    {
+      id: 'mike', name: 'MEWING MIKE', line: '...',
+      behaviour: 'linger', effect: 'buff', amount: 20, weight: 4, speed: 40, dur: 12,
+      skin: { skin: '#f2b06a', shirt: '#ffffff', pants: '#1f2937', hair: '#2b2521', hat: null, wide: 1.15 }
+    },
+    {
+      id: 'tourist', name: 'OHIO TOURIST', line: 'BRO THIS PLACE IS PEAK.',
+      behaviour: 'linger', effect: 'flash', amount: 2.6, weight: 4, speed: 70, dur: 10,
+      skin: { skin: '#d9a066', shirt: '#22d3ee', pants: '#f59e0b', hair: null, hat: 'cap', wide: 1 },
+      prop: 'camera'
+    },
+    {
+      id: 'goober', name: 'A GOOBER', line: '*squelch*',
+      behaviour: 'bounce', effect: 'powerup', weight: 5, speed: 95, dur: 13,
+      skin: { skin: '#9ef01a', shirt: '#7cc70f', pants: '#6aa80d', hair: null, hat: null, wide: 1.4, potato: true }
+    },
+    {
+      id: 'intern', name: 'BACKROOMS INTERN', line: 'IS IT STILL 1997?',
+      behaviour: 'flicker', effect: 'points', amount: 300, weight: 3, speed: 55, dur: 11,
+      skin: { skin: '#cbb994', shirt: '#b8a878', pants: '#8c7f5c', hair: '#5c5138', hat: null, wide: 0.95 }
+    },
+    {
+      id: 'gyatt', name: 'THE GYATT GUARD', line: 'I AM SO BIG.',
+      behaviour: 'phase', effect: 'none', weight: 3, speed: 46,
+      skin: { skin: '#a3703c', shirt: '#7f1d1d', pants: '#3f1414', hair: null, hat: null, wide: 2.1 },
+      scale: 1.75
+    },
+    {
+      id: 'broski', name: 'LIL BROSKI', line: 'I GOT YOU, BRO.',
+      behaviour: 'escort', effect: 'minion', weight: 4, speed: 175, dur: 18,
+      skin: { skin: '#ffd43b', shirt: '#ef4444', pants: '#1e40af', hair: null, hat: 'cap', wide: 0.8, small: true }
+    },
+    {
+      id: 'airpods', name: 'AIRPODS KID', line: 'WHAT?',
+      behaviour: 'oblivious', effect: 'none', weight: 4, speed: 58, dur: 16,
+      skin: { skin: '#f2b06a', shirt: '#a78bfa', pants: '#312e81', hair: '#18181b', hat: 'phones', wide: 1 }
+    }
+  ];
+
+  /* ------------------------------------------------------------ DANCE LEVELS
+     The possum celebration escalates as you rack things up. Level 5 is the
+     full-screen party you get for actually finishing a shift. */
+  BZ.DANCE_LEVELS = [
+    { level: 1, possums: 1, dur: 3.4, confetti: 0,   strobe: false, title: 'NICE.',              sub: 'a possum noticed' },
+    { level: 2, possums: 2, dur: 4.0, confetti: 40,  strobe: false, title: 'LET HIM COOK',       sub: 'the possums are pleased' },
+    { level: 3, possums: 4, dur: 4.6, confetti: 90,  strobe: true,  title: 'CERTIFIED',          sub: 'conga line initiated' },
+    { level: 4, possums: 7, dur: 5.4, confetti: 160, strobe: true,  title: 'ABSOLUTELY COOKING', sub: 'management has been notified' },
+    { level: 5, possums: 14, dur: 12, confetti: 420, strobe: true,  title: 'SHIFT COMPLETE',     sub: 'everybody dances. no exceptions.' }
+  ];
+  BZ.WIN_ROUND = 20;
 
   /* --------------------------------------------------------------- BARK LINES */
   /* ------------------------------------------------------------- DIFFICULTY */

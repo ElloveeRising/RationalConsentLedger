@@ -132,10 +132,40 @@
     return props;
   }
 
+  function buildTerrain() {
+    return BZ.TERRAIN.map(function (o) {
+      var spec = BZ.TERRAIN_SPEC[o.kind];
+      var c = BZ.tileCenter(o.x, o.y);
+      return {
+        kind: o.kind, zone: o.zone, wx: c.x, wy: c.y, spec: spec,
+        hp: spec.hp || 0, dead: false, cool: 0, active: 0
+      };
+    });
+  }
+
+  /* Barrels and crates come back each round so the room stays playable. */
+  function respawnTerrain() {
+    S.terrain.forEach(function (o) {
+      if (o.spec.respawn) { o.dead = false; o.hp = o.spec.hp; }
+    });
+  }
+
   function findProp(type) {
     for (var i = 0; i < S.props.length; i++) if (S.props[i].type === type) return S.props[i];
     return null;
   }
+
+  /* Handed to crew.js so it can act on the world without importing game.js. */
+  var CREW_HELPERS = {
+    blocked: function (x, y, r) { return blocked(x, y, r); },
+    moveBy: function (e, dx, dy, r) { return moveBy(e, dx, dy, r); },
+    damageZombie: function (z, d, m) { return damageZombie(z, d, m); },
+    award: function (p) { return award(p); },
+    floater: function (x, y, t, c, b) { return floater(x, y, t, c, b); },
+    burst: function (x, y, c, n, sp) { return burst(x, y, c, n, sp); },
+    grantPowerup: function (t, x, y) { return grantPowerup(t, x, y); },
+    emit: function (k, p) { return emit(k, p); }
+  };
 
   BZ.Game = {
     on: function (fn) { listeners.push(fn); },
@@ -144,6 +174,7 @@
       canvas = cv;
       ctx = cv.getContext('2d', { alpha: false });
       BZ.Input.attach(cv);
+      BZ.Crew.init(CREW_HELPERS);
       window.addEventListener('resize', BZ.Game.resize);
       BZ.Game.resize();
     },
@@ -169,14 +200,15 @@
       if (p) BZ.Input.clearSticks();
     },
 
-    start: function (charId, playerName, difficulty) {
+    start: function (charId, playerName, difficulty, classId) {
       var chDef = BZ.CHARACTERS.filter(function (c) { return c.id === charId; })[0] || BZ.CHARACTERS[0];
       var diff = BZ.DIFFICULTY[difficulty] || BZ.DIFFICULTY.normal;
+      var clsDef = BZ.CLASSES.filter(function (c) { return c.id === classId; })[0] || BZ.CLASSES[0];
       var world = BZ.buildGrid();
       world.openDoors = {};
 
       var spawn = BZ.tileCenter(BZ.SPAWN_TILE.x, BZ.SPAWN_TILE.y);
-      var maxHp = 100 + (chDef.id === 'harold' ? 60 : 0);
+      var maxHp = 100 + (chDef.id === 'harold' ? 60 : 0) + (clsDef.hp || 0);
 
       S = {
         running: true, paused: false, over: false,
@@ -192,6 +224,10 @@
         flowQueue: new Int32Array(MW * MH),
         flowT: 0,
         zombies: [], bullets: [], grenades: [], particles: [],
+        interlopers: [], turrets: [], minions: [], terrain: [],
+        dance: null, danceSeen: 0, won: false,
+        aimSmooth: { x: 0, y: -1 },
+        interloperT: 26,
         floaters: [], powerups: [], props: buildProps(),
         unlocked: { lobby: true },
         cam: { x: 0, y: 0 },
@@ -199,6 +235,8 @@
         prompt: null,
         player: {
           x: spawn.x, y: spawn.y, r: 13,
+          vx: 0, vy: 0,
+          cls: clsDef, abilityCd: 0, dashT: 0, dashDir: { x: 1, y: 0 },
           hp: maxHp, maxHp: maxHp,
           points: chDef.id === 'hashbrown' ? 1000 : 500,
           weapons: [makeWeapon(chDef.id === 'admin' ? 'ray' : 'pistol')],
@@ -210,7 +248,7 @@
           costMul: chDef.id === 'noobert' ? 0.88 : 1,
           pointMul: chDef.id === 'oofington' ? 1.22 : 1,
           meleeMul: chDef.id === 'chad' ? 1.4 : 1,
-          speedMul: chDef.id === 'karen' ? 1.15 : 1,
+          speedMul: (chDef.id === 'karen' ? 1.15 : 1) * (clsDef.speed || 1),
           puMul: chDef.id === 'dj' ? 1.6 : 1,
           dmgMul: 1
         },
@@ -221,10 +259,13 @@
         }
       };
 
+      S.terrain = buildTerrain();
+      BZ.Crew.reset(S);
+      BZ.Dance.reset(S);
       S.map = BZ.bakeMap(world);
       computeFlow();
       updateCam(1);
-      emit('started', { char: chDef });
+      emit('started', { char: chDef, cls: clsDef });
       pushHud();
     },
 
@@ -292,6 +333,34 @@
     if (S.round >= 5 && (Date.now() - S.run.startTime) < 4 * 60 * 1000) BZ.Secrets.find('speedrun');
   }
 
+  /* Milestones hand off to the possums. Higher levels never regress. */
+  function celebrateRound(round) {
+    if (round >= BZ.WIN_ROUND && !S.won) {
+      S.won = true;
+      BZ.Secrets.recordWin(round);
+      BZ.Dance.trigger(S, 5, 'SHIFT COMPLETE', 'round ' + round + ' — everybody dances');
+      emit('win', { round: round });
+      return;
+    }
+    if (round >= 18) BZ.Dance.trigger(S, 4);
+    else if (round >= 15) BZ.Dance.trigger(S, 3);
+    else if (round >= 10) BZ.Dance.trigger(S, 2);
+    else if (round >= 5) BZ.Dance.trigger(S, 1);
+  }
+
+  function celebrateSecrets() {
+    if (!S || !S.running) return;
+    var n = BZ.Secrets.count();
+    if (n >= 16) BZ.Dance.trigger(S, 5, 'EVERY SECRET FOUND', 'the possums bow');
+    else if (n >= 12) BZ.Dance.trigger(S, 4);
+    else if (n >= 7) BZ.Dance.trigger(S, 3);
+    else if (n >= 3) BZ.Dance.trigger(S, 2);
+    else if (n >= 1) BZ.Dance.trigger(S, 1);
+  }
+  BZ.Secrets.onEvent(function (kind) {
+    if (kind === 'secret') celebrateSecrets();
+  });
+
   function unlockedZones() { return S.unlocked; }
 
   function spawnZombie() {
@@ -319,7 +388,7 @@
              (S.round <= 3 ? rand(0.94, 1.05) : rand(0.90, 1.12)),
       state: 'outside', win: win, tearT: rand(0.3, 1.2),
       atkCd: 0, phase: rand(0, 6.28), hurtFlash: 0,
-      doggo: doggo, skin: pick(skins),
+      doggo: doggo, skin: pick(skins), stunT: 0, knockX: 0, knockY: 0,
       aim: { x: 0, y: 1 }, groanT: rand(1, 6)
     });
   }
@@ -360,6 +429,17 @@
         bestD = dist;
         best = { kind: 'door', door: d, label: 'OPEN ' + d.label, cost: costOf(d.cost) };
       }
+    }
+
+    // Floor zappers are terrain, not props, but they're bought the same way.
+    for (i = 0; i < S.terrain.length; i++) {
+      var to = S.terrain[i];
+      if (to.kind !== 'zap' || !S.unlocked[to.zone]) continue;
+      var td = Math.hypot(pl.x - to.wx, pl.y - to.wy);
+      if (td > to.spec.r + 16 || td >= bestD) continue;
+      if (to.active > 0) continue;
+      best = { kind: 'zap', terrain: to, label: 'CHARGE THE FLOOR PLATE', cost: costOf(to.spec.cost) };
+      bestD = td;
     }
 
     for (i = 0; i < S.props.length; i++) {
@@ -558,6 +638,13 @@
         }
         break;
       }
+      case 'zap': {
+        if (!spend(it.cost)) return;
+        it.terrain.active = it.terrain.spec.dur;
+        BZ.Audio.power();
+        emit('toast', { text: 'FLOOR PLATE LIVE FOR ' + it.terrain.spec.dur + 'S', tone: 'good' });
+        break;
+      }
       case 'vault': {
         it.prop.used = true;
         var avail = BZ.PERK_ORDER.filter(function (k) { return !pl.perks[k]; });
@@ -632,6 +719,71 @@
     pushHud();
   }
 
+  /* -------------------------------------------------------------- TERRAIN */
+  // Goo slows whatever is standing in it. Returns a speed multiplier.
+  function terrainSpeedMul(x, y) {
+    var mul = 1;
+    for (var i = 0; i < S.terrain.length; i++) {
+      var o = S.terrain[i];
+      if (o.kind !== 'goo') continue;
+      var dx = x - o.wx, dy = (y - o.wy) * 2.2;   // goo pools are flattened
+      if (dx * dx + dy * dy < o.spec.r * o.spec.r) mul *= o.spec.slow;
+    }
+    return mul;
+  }
+
+  function breakTerrain(o) {
+    if (o.dead) return;
+    o.dead = true;
+    if (o.kind === 'barrel') {
+      explode(o.wx, o.wy - 16, o.spec.blast, o.spec.dmg);
+      burst(o.wx, o.wy - 16, '#ff6b35', 24, 280);
+    } else if (o.kind === 'crate') {
+      burst(o.wx, o.wy - 14, '#7d5628', 18, 200);
+      BZ.Audio.hit();
+      if (Math.random() < 0.35) {
+        grantPowerup('maxammo', o.wx, o.wy);
+      } else {
+        floater(o.wx, o.wy - 30, '+' + award(120), BZ.COLORS.sodium, true);
+      }
+    }
+  }
+
+  function updateTerrain(dt) {
+    var pl = S.player;
+    for (var i = 0; i < S.terrain.length; i++) {
+      var o = S.terrain[i];
+      if (o.cool > 0) o.cool -= dt;
+
+      if (o.kind === 'bounce' && o.cool <= 0) {
+        if (Math.hypot(pl.x - o.wx, pl.y - o.wy) < o.spec.r) {
+          // Launch along current heading; standing still launches you forward.
+          var vl = Math.hypot(pl.vx, pl.vy);
+          var dx, dy;
+          if (vl > 30) { dx = pl.vx / vl; dy = pl.vy / vl; }
+          else { dx = S.aimSmooth.x; dy = S.aimSmooth.y; }
+          pl.vx = dx * o.spec.power;
+          pl.vy = dy * o.spec.power;
+          o.cool = o.spec.cd;
+          S.shake = Math.max(S.shake, 6);
+          burst(o.wx, o.wy, BZ.COLORS.toxic, 16, 220);
+          BZ.Audio.powerup();
+        }
+      }
+
+      if (o.kind === 'zap' && o.active > 0) {
+        o.active -= dt;
+        for (var j = S.zombies.length - 1; j >= 0; j--) {
+          var z = S.zombies[j];
+          if (z.state === 'outside') continue;
+          if (Math.abs(z.x - o.wx) > o.spec.r || Math.abs(z.y - o.wy) > o.spec.r * 0.6) continue;
+          damageZombie(z, o.spec.dps * dt, false);
+          if (Math.random() < dt * 6) burst(z.x, z.y - 22, BZ.COLORS.volt, 2, 110);
+        }
+      }
+    }
+  }
+
   /* --------------------------------------------------------------- COMBAT */
   function fire() {
     var pl = S.player;
@@ -647,7 +799,7 @@
     w.ammo -= 1;
     S.run.shotsThisRound += 1;
 
-    var aim = BZ.Input.state.aim;
+    var aim = S.aimSmooth;
     var baseAng = Math.atan2(aim.y, aim.x);
     var dmgMul = w.dmgMul * (pl.perks.dtap ? 1.55 : 1) * pl.dmgMul;
 
@@ -659,7 +811,8 @@
         vx: Math.cos(a) * d.speed, vy: Math.sin(a) * d.speed,
         dmg: d.dmg * dmgMul, life: d.range / d.speed,
         pierce: d.pierce || 0, hit: [],
-        splash: d.splash || 0, kind: d.kind
+        splash: d.splash || 0, kind: d.kind,
+        knockback: d.knockback || 0, stun: d.stun || 0, homing: d.homing || 0
       });
     }
     pl.muzzle = 1;
@@ -715,11 +868,66 @@
     if (hitAny) S.shake = Math.max(S.shake, 5);
   }
 
+  /* ------------------------------------------------------------ ABILITIES */
+  function useAbility() {
+    var pl = S.player;
+    if (pl.abilityCd > 0) { BZ.Audio.deny(); return; }
+    var id = pl.cls.id;
+
+    if (id === 'goober') {
+      S.swings.push({ x: pl.x, y: pl.y - 18, t: 0.42, reach: 160 });
+      S.shake = 16;
+      burst(pl.x, pl.y - 10, BZ.COLORS.toxic, 30, 300);
+      BZ.Audio.nuke();
+      S.zombies.slice().forEach(function (z) {
+        if (z.state === 'outside') return;
+        var dx = z.x - pl.x, dy = z.y - pl.y;
+        var d = Math.hypot(dx, dy) || 1;
+        if (d > 160) return;
+        z.knockX = (dx / d) * 420;
+        z.knockY = (dy / d) * 420;
+        damageZombie(z, 330 * pl.dmgMul, false);
+      });
+      emit('toast', { text: 'GROUND POUND', tone: 'good' });
+
+    } else if (id === 'gremlin') {
+      BZ.Crew.deployTurret(S, pl.x, pl.y);
+
+    } else if (id === 'summoner') {
+      BZ.Crew.raiseMinions(S, pl.x, pl.y, 3);
+
+    } else if (id === 'yapper') {
+      S.swings.push({ x: pl.x, y: pl.y - 18, t: 0.5, reach: 200 });
+      S.shake = 9;
+      BZ.Audio.bark();
+      var yapped = 0;
+      S.zombies.slice().forEach(function (z) {
+        if (z.state === 'outside') return;
+        if (Math.hypot(z.x - pl.x, z.y - pl.y) > 200) return;
+        z.stunT = Math.max(z.stunT || 0, 3.5);
+        yapped++;
+        damageZombie(z, 130 * pl.dmgMul, false);
+      });
+      emit('toast', { text: 'YAPPED AT ' + yapped + '. THEY ARE STUNNED.', tone: 'good' });
+
+    } else if (id === 'speedrunner') {
+      var aim = S.aimSmooth;
+      pl.dashT = 0.30;
+      pl.dashDir = { x: aim.x, y: aim.y };
+      pl.dashHit = [];
+      BZ.Audio.melee();
+      emit('toast', { text: 'ZOOM', tone: 'good' });
+    }
+
+    pl.abilityCd = pl.cls.cd;
+    pushHud();
+  }
+
   function throwGrenade() {
     var pl = S.player;
     if (pl.grenades <= 0) { BZ.Audio.dry(); return; }
     pl.grenades -= 1;
-    var aim = BZ.Input.state.aim;
+    var aim = S.aimSmooth;
     S.grenades.push({
       x: pl.x, y: pl.y - 16,
       vx: aim.x * 330, vy: aim.y * 330,
@@ -739,6 +947,17 @@
       var d = Math.hypot(z.x - x, z.y - y);
       if (d > radius) continue;
       damageZombie(z, dmg * (1 - d / radius * 0.5), false);
+    }
+    // Chain reaction: barrels set off other barrels.
+    for (var t2 = 0; t2 < S.terrain.length; t2++) {
+      var o2 = S.terrain[t2];
+      if (o2.dead || o2.kind !== 'barrel') continue;
+      if (Math.hypot(o2.wx - x, o2.wy - y) > radius + 18) continue;
+      (function (target, owner) {
+        setTimeout(function () {
+          if (S === owner && S.running && !target.dead) breakTerrain(target);
+        }, 90);
+      })(o2, S);
     }
   }
 
@@ -825,7 +1044,7 @@
     var pl = S.player;
 
     // --- timers
-    ['instakill', 'double', 'fire', 'lowgrav'].forEach(function (k) {
+    ['instakill', 'double', 'fire', 'lowgrav', 'mewing'].forEach(function (k) {
       if (S.active[k] > 0) S.active[k] = Math.max(0, S.active[k] - dt);
     });
     if (S.shake > 0) S.shake = Math.max(0, S.shake - dt * 34);
@@ -835,6 +1054,7 @@
     if (pl.fireCd > 0) pl.fireCd -= dt;
     if (pl.meleeCd > 0) pl.meleeCd -= dt;
     if (pl.swapT > 0) pl.swapT -= dt;
+    if (pl.abilityCd > 0) { pl.abilityCd = Math.max(0, pl.abilityCd - dt); if (pl.abilityCd === 0) pushHud(); }
     if (pl.reloadT > 0) { pl.reloadT -= dt; if (pl.reloadT <= 0) finishReload(); }
 
     // --- health regen
@@ -852,6 +1072,7 @@
     if (BZ.Input.consume('grenade')) throwGrenade();
     if (BZ.Input.consume('swap')) swapWeapon();
     if (BZ.Input.consume('interact')) doInteract();
+    if (BZ.Input.consume('ability')) useAbility();
 
     // --- control hint fades once you've actually used each stick
     if (S.hint.t > 0) {
@@ -862,18 +1083,52 @@
     }
 
     // --- movement
+    // Velocity-based with acceleration and drag, rather than snapping straight
+    // to the stick vector — stopping and turning now carry a little weight.
     var spd = 190 * pl.speedMul * (pl.perks.sprint ? 1.30 : 1);
     if (S.active.lowgrav > 0) spd *= 1.35;
+    spd *= terrainSpeedMul(pl.x, pl.y);
+
     var mx = inp.move.x, my = inp.move.y;
     var mlen = Math.hypot(mx, my);
     if (mlen > 1) { mx /= mlen; my /= mlen; mlen = 1; }
-    if (mlen > 0.01) {
-      moveBy(pl, mx * spd * dt, my * spd * dt, pl.r);
-      pl.phase += dt * 11 * Math.min(1, mlen + 0.3);
+
+    if (pl.dashT > 0) {
+      pl.dashT -= dt;
+      pl.vx = pl.dashDir.x * 760;
+      pl.vy = pl.dashDir.y * 760;
+      // clip anything we pass through
+      S.zombies.slice().forEach(function (z) {
+        if (z.state === 'outside') return;
+        if (pl.dashHit.indexOf(z) !== -1) return;
+        if (Math.hypot(z.x - pl.x, z.y - pl.y) > 34) return;
+        pl.dashHit.push(z);
+        damageZombie(z, 260 * pl.dmgMul, false);
+      });
+      burst(pl.x, pl.y - 16, BZ.COLORS.red, 3, 90);
+    } else {
+      var tvx = mx * spd, tvy = my * spd;
+      // Accelerate briskly, coast to a stop a touch more slowly.
+      var k = 1 - Math.pow(mlen > 0.01 ? 0.0000025 : 0.00004, dt);
+      pl.vx += (tvx - pl.vx) * k;
+      pl.vy += (tvy - pl.vy) * k;
+    }
+
+    if (Math.abs(pl.vx) > 0.5 || Math.abs(pl.vy) > 0.5) {
+      moveBy(pl, pl.vx * dt, pl.vy * dt, pl.r);
+      var vlen = Math.hypot(pl.vx, pl.vy);
+      pl.phase += dt * 11 * Math.min(1, vlen / spd + 0.3);
       if (!inp.aiming && !inp.mouse.has && mlen > 0.2) {
         inp.aim.x = mx / mlen; inp.aim.y = my / mlen;
       }
     }
+
+    // Smooth the aim vector too, so the gun arm swings rather than snapping.
+    var ak = 1 - Math.pow(0.000002, dt);
+    S.aimSmooth.x += (inp.aim.x - S.aimSmooth.x) * ak;
+    S.aimSmooth.y += (inp.aim.y - S.aimSmooth.y) * ak;
+    var al = Math.hypot(S.aimSmooth.x, S.aimSmooth.y) || 1;
+    S.aimSmooth.x /= al; S.aimSmooth.y /= al;
 
     // --- firing
     if (inp.firing && pl.fireCd <= 0) fire();
@@ -883,7 +1138,9 @@
       S.phaseT -= dt;
       if (S.phaseT <= 0) beginRound();
     } else if (S.phase === 'active') {
-      if (S.toSpawn > 0) {
+      if (BZ.Dance.freezing(S)) {
+        // the party does not get interrupted
+      } else if (S.toSpawn > 0) {
         S.spawnT -= dt;
         var interval = Math.max(0.30, 2.5 - S.round * 0.10) * S.diff.rate;
         var cap = Math.max(3, Math.round(aliveCap(S.round) * S.diff.count));
@@ -899,6 +1156,9 @@
         S.phase = 'intro';
         S.phaseT = 4.2;
         emit('cleared', { round: S.round });
+        respawnTerrain();
+        celebrateRound(S.round);
+        if (Math.random() < 0.7) BZ.Crew.spawn(S);
       }
     }
 
@@ -906,7 +1166,18 @@
     S.flowT -= dt;
     if (S.flowT <= 0) { computeFlow(); S.flowT = 0.16; }
 
-    updateZombies(dt);
+    if (!BZ.Dance.freezing(S)) updateZombies(dt);
+    updateTerrain(dt);
+    BZ.Crew.update(S, dt);
+    BZ.Dance.update(S, dt);
+
+    // An interloper turns up every so often mid-round as well.
+    S.interloperT -= dt;
+    if (S.interloperT <= 0) {
+      S.interloperT = rand(30, 58);
+      if (Math.random() < 0.55) BZ.Crew.spawn(S);
+    }
+
     updateBullets(dt);
     updateGrenades(dt);
     updateParticles(dt);
@@ -943,6 +1214,21 @@
       if (z.atkCd > 0) z.atkCd -= dt;
       z.groanT -= dt;
       if (z.groanT <= 0) { z.groanT = rand(4, 11); if (Math.random() < 0.5) (z.doggo ? BZ.Audio.bark() : BZ.Audio.zombieGroan()); }
+
+      // knockback decays independently of whatever else it's doing
+      if (z.knockX || z.knockY) {
+        moveBy(z, z.knockX * dt, z.knockY * dt, z.r);
+        var kdamp = 1 - 7 * dt;
+        z.knockX *= kdamp; z.knockY *= kdamp;
+        if (Math.abs(z.knockX) < 5) z.knockX = 0;
+        if (Math.abs(z.knockY) < 5) z.knockY = 0;
+      }
+      if (z.stunT > 0) {
+        z.stunT -= dt;
+        z.phase += dt * 1.6;
+        if (Math.random() < dt * 3) burst(z.x, z.y - 40, BZ.COLORS.volt, 1, 40);
+        continue;
+      }
 
       if (z.state === 'outside') {
         var win = z.win;
@@ -998,7 +1284,7 @@
 
       var vx = dir.x + sx, vy = dir.y + sy;
       var vl = Math.hypot(vx, vy) || 1;
-      var sp = z.speed * dt;
+      var sp = z.speed * terrainSpeedMul(z.x, z.y) * dt;
       moveBy(z, vx / vl * sp, vy / vl * sp, z.r);
       z.aim = { x: toP.x / (dP || 1), y: toP.y / (dP || 1) };
       z.phase += dt * (z.doggo ? 10 : 6.5) * (z.speed / 90);
@@ -1057,6 +1343,27 @@
       if (b.life <= 0) { S.bullets.splice(i, 1); continue; }
 
       // Sub-step so fast rounds can't tunnel through zombies or walls.
+      // Bee cannon: steer toward whatever is closest.
+      if (b.homing) {
+        var tgt = null, tgtD = 420 * 420;
+        for (var hz = 0; hz < S.zombies.length; hz++) {
+          var zz = S.zombies[hz];
+          if (zz.state === 'outside') continue;
+          var hdx = zz.x - b.x, hdy = (zz.y - 20) - b.y;
+          var hd = hdx * hdx + hdy * hdy;
+          if (hd < tgtD) { tgtD = hd; tgt = zz; }
+        }
+        if (tgt) {
+          var sp0 = Math.hypot(b.vx, b.vy) || 1;
+          var wx = tgt.x - b.x, wy = (tgt.y - 20) - b.y;
+          var wl = Math.hypot(wx, wy) || 1;
+          b.vx += (wx / wl * sp0 - b.vx) * Math.min(1, b.homing * dt);
+          b.vy += (wy / wl * sp0 - b.vy) * Math.min(1, b.homing * dt);
+          var nl = Math.hypot(b.vx, b.vy) || 1;
+          b.vx = b.vx / nl * sp0; b.vy = b.vy / nl * sp0;
+        }
+      }
+
       var steps = Math.max(1, Math.ceil(Math.hypot(b.vx, b.vy) * dt / 9));
       var sdt = dt / steps;
       var dead = false;
@@ -1077,11 +1384,32 @@
             b.hit.push(z);
             if (b.splash) { explode(b.x, b.y, b.splash, b.dmg); dead = true; }
             else {
+              if (b.knockback) {
+                var kdx = z.x - b.x, kdy = z.y - b.y;
+                var kd = Math.hypot(kdx, kdy) || 1;
+                z.knockX = (z.knockX || 0) + kdx / kd * b.knockback;
+                z.knockY = (z.knockY || 0) + kdy / kd * b.knockback;
+              }
+              if (b.stun) z.stunT = Math.max(z.stunT || 0, b.stun);
               damageZombie(z, b.dmg, false);
               if (b.pierce > 0) b.pierce -= 1; else dead = true;
             }
             break;
           }
+        }
+        if (dead) break;
+        // destructible terrain
+        for (var ti = 0; ti < S.terrain.length; ti++) {
+          var to = S.terrain[ti];
+          if (to.dead || !to.spec.hp) continue;
+          if (!S.unlocked[to.zone]) continue;
+          if (Math.abs(b.x - to.wx) > to.spec.r * 0.55 ||
+              Math.abs(b.y - (to.wy - 18)) > 22) continue;
+          to.hp -= 1;
+          burst(b.x, b.y, to.kind === 'barrel' ? '#ff6b35' : '#7d5628', 5, 130);
+          if (to.hp <= 0) breakTerrain(to);
+          dead = true;
+          break;
         }
         if (dead) break;
         // shootable secret props
@@ -1201,7 +1529,12 @@
       secrets: BZ.Secrets.count(), secretsTotal: BZ.Secrets.total(),
       zone: zoneOfPlayer(),
       alt: pl.weapons.length > 1 ? weaponName(pl.weapons[(pl.cur + 1) % pl.weapons.length]) : null,
-      active: S.active
+      active: S.active,
+      cls: pl.cls,
+      abilityCd: pl.abilityCd,
+      abilityReady: pl.abilityCd <= 0,
+      turrets: S.turrets.length,
+      minions: S.minions.length
     });
   }
 
@@ -1231,8 +1564,26 @@
 
     var t = S.time;
 
+    // flat terrain (goo, floor plates) paints straight onto the ground
+    for (var fi = 0; fi < S.terrain.length; fi++) {
+      var ft = S.terrain[fi];
+      if (!S.unlocked[ft.zone]) continue;
+      if (ft.kind === 'goo' || ft.kind === 'zap' || ft.kind === 'bounce') {
+        BZ.drawTerrain(ctx, ft, t);
+      }
+    }
+
     // depth-sorted actors + props
     var list = [];
+    S.terrain.forEach(function (o) {
+      if (!S.unlocked[o.zone]) return;
+      if (o.kind === 'goo' || o.kind === 'zap' || o.kind === 'bounce') return;
+      if (o.dead) return;
+      list.push({ y: o.wy, kind: 'terrain', o: o });
+    });
+    S.turrets.forEach(function (o) { list.push({ y: o.y, kind: 'turret', o: o }); });
+    S.minions.forEach(function (o) { list.push({ y: o.y, kind: 'minion', o: o }); });
+    S.interlopers.forEach(function (o) { list.push({ y: o.y, kind: 'inter', o: o }); });
     S.props.forEach(function (p) {
       if (!S.unlocked[p.zone]) return;
       if (p.type === 'teddy' && p.taken) return;
@@ -1245,11 +1596,15 @@
     list.sort(function (a, b) { return a.y - b.y; });
 
     var bigHead = BZ.Secrets.progress.bigHead;
-    var aim = BZ.Input.state.aim;
+    var aim = S.aimSmooth;
 
     for (var i = 0; i < list.length; i++) {
       var e = list[i];
-      if (e.kind === 'prop') BZ.drawProp(ctx, e.o, t);
+      if (e.kind === 'terrain') BZ.drawTerrain(ctx, e.o, t);
+      else if (e.kind === 'turret') BZ.drawTurret(ctx, e.o, t);
+      else if (e.kind === 'minion') BZ.drawMinion(ctx, e.o, t);
+      else if (e.kind === 'inter') BZ.drawInterloper(ctx, e.o, t);
+      else if (e.kind === 'prop') BZ.drawProp(ctx, e.o, t);
       else if (e.kind === 'pu') BZ.drawPowerup(ctx, e.o, t);
       else if (e.kind === 'z') {
         var z = e.o;
@@ -1261,6 +1616,12 @@
             bigHead: bigHead, hurtFlash: z.hurtFlash,
             scale: S.active.lowgrav > 0 ? 1.05 : 1
           });
+        }
+        if (z.stunT > 0) {
+          ctx.fillStyle = BZ.COLORS.volt;
+          ctx.font = 'bold 13px "Silkscreen", monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('!', z.x + Math.sin(t * 9) * 3, z.y - 66);
         }
         // health pip for wounded zombies
         if (z.hp < z.maxHp && z.state !== 'outside') {
@@ -1359,5 +1720,6 @@
     }
 
     BZ.drawSticks(ctx, BZ.Input.state.sticks, S.hint, vw, vh);
+    BZ.Dance.draw(ctx, S, vw, vh);
   }
 })(window.BZ = window.BZ || {});

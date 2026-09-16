@@ -1,10 +1,11 @@
 /* Offline cache. Bump CACHE when files change so returning players pick up
    the new build instead of a stale one. */
-var CACHE = 'blockhead-zombies-v1';
+var CACHE = 'blockhead-zombies-v2';
 var ASSETS = [
   './', './index.html', './manifest.webmanifest',
   './js/data.js', './js/mapdata.js', './js/audio.js', './js/secrets.js',
-  './js/input.js', './js/render.js', './js/game.js', './js/main.js',
+  './js/input.js', './js/render.js', './js/crew.js', './js/possum.js',
+  './js/game.js', './js/main.js',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'
 ];
 

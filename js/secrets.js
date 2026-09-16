@@ -16,7 +16,10 @@
     games: 0,
     bigHead: false,
     name: '',
-    difficulty: 'chill'
+    difficulty: 'chill',
+    cls: 'goober',
+    wins: 0,
+    bestDance: 0
   };
 
   var progress = null;
@@ -137,6 +140,12 @@
     setBigHead: function (v) { progress.bigHead = !!v; save(); },
     setName: function (n) { progress.name = n; save(); },
     setDifficulty: function (d) { progress.difficulty = d; save(); },
+    setClass: function (c) { progress.cls = c; save(); },
+    recordWin: function (round) {
+      progress.wins = (progress.wins || 0) + 1;
+      progress.bestDance = 5;
+      save();
+    },
 
     reset: function () {
       progress = JSON.parse(JSON.stringify(DEFAULT_PROGRESS));
